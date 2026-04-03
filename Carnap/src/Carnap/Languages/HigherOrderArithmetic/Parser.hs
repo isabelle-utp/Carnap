@@ -1,5 +1,5 @@
 {-#LANGUAGE TypeOperators, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
-module Carnap.Languages.HigherOrderArithmetic.Parser ( untypedHigherOrderArithmeticParser) where
+module Carnap.Languages.HigherOrderArithmetic.Parser ( untypedHigherOrderArithmeticParser, untypedHigherOrderArithmeticMontagueParser) where
 
 import Carnap.Core.Data.Types
 import Carnap.Languages.HigherOrderArithmetic.Syntax
@@ -48,6 +48,8 @@ untypedHigherOrderArithmeticOptions = FirstOrderParserOptions
           parenOrBracket opt rw = (wrappedWith '(' ')' (rw opt) <|> wrappedWith '[' ']' (rw opt))
 
 untypedHigherOrderArithmeticParser = parserFromOptions untypedHigherOrderArithmeticOptions
+
+untypedHigherOrderArithmeticMontagueParser = parserFromOptions untypedHigherOrderArithmeticOptions { hasBooleanConstants = False }
 
 instance ParsableLex (Form Bool) UntypedHigherOrderArithLex where
         langParser = untypedHigherOrderArithmeticParser

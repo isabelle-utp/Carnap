@@ -24,6 +24,8 @@ activate cls extra chunk
     | "foLJ" `elem` cls = template (opts [("system","foLJ")])
     | "openLogicFOLK" `elem` cls = template (opts [("system","openLogicFOLK")])
     | "openLogicFOLJ" `elem` cls = template (opts [("system","openLogicFOLJ")])
+    | "openLogicExHOArithLK" `elem` cls = template (opts [("system","openLogicExHOArithLK")])
+    | "openLogicExHOArithLJ" `elem` cls = template (opts [("system","openLogicExHOArithLJ")])
     | otherwise = RawBlock "html" "<div>No Matching Sequent Calculus</div>"
     where (h:t) = formatChunk chunk
           opts adhoc = unions [fromList extra, fromList fixed, fromList adhoc]
@@ -47,6 +49,8 @@ toPlayground cls extra content
     | "foLJ" `elem` cls = template (opts [("system","foLJ")])
     | "openLogicFOLK" `elem` cls = template (opts [("system","openLogicFOLK")])
     | "openLogicFOLJ" `elem` cls = template (opts [("system","openLogicFOLJ")])
+    | "openLogicExHOArithLK" `elem` cls = template (opts [("system","openLogicExHOArithLK")])
+    | "openLogicExHOArithLJ" `elem` cls = template (opts [("system","openLogicExHOArithLJ")])
     | otherwise = RawBlock "html" "<div>No Matching Sequent Calculus</div>"
     where opts adhoc = unions [fromList extra, fromList fixed, fromList adhoc]
           fixed = [ ("type", "sequentchecker") ]

@@ -39,6 +39,7 @@ import Carnap.Languages.PurePropositional.Logic
 import Carnap.Languages.PureFirstOrder.Logic
 import Carnap.Languages.PureFirstOrder.Logic.Gentzen
 import Carnap.Languages.PureFirstOrder.Logic.IchikawaJenkins
+import Carnap.Languages.HigherOrderArithmetic.Logic
 import Carnap.GHCJS.SharedTypes
 import Carnap.GHCJS.Util.ProofJS
 
@@ -59,7 +60,8 @@ getCheckers w = genInOutElts w "div" "div" "sequentchecker"
 activateChecker :: Document -> Maybe (Element, Element, Map String String) -> IO ()
 activateChecker _ Nothing  = return ()
 activateChecker w (Just (i, o, opts))= maybe noSystem id ((setupWith `ofPropSeqSys` sys) 
-                                                  `mplus` (setupWith `ofFOLSeqSys` sys))
+                                                  `mplus` (setupWith `ofFOLSeqSys` sys)
+                                                  `mplus` (setupWith `ofHigherOrderArithmeticSeqSys` sys))
         where sys = case M.lookup "system" opts of
                         Just s -> s
                         Nothing -> "propLK"
