@@ -1,4 +1,4 @@
-{-#LANGUAGE TypeOperators, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses#-}
+{-#LANGUAGE TypeOperators, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, MonoLocalBinds#-}
 module Carnap.Languages.DefiniteDescription.Parser where
 
 import Carnap.Core.Data.Types

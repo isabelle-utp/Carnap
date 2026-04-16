@@ -130,6 +130,8 @@ library
                      , Carnap.Languages.HigherOrderArithmetic.Parser
                      , Carnap.Languages.HigherOrderArithmetic.Logic
                      , Carnap.Languages.HigherOrderArithmetic.Logic.OpenLogic
+                     , Carnap.Languages.HigherOrderArithmetic.Logic.Gentzen
+                     , Carnap.Languages.HigherOrderArithmetic.Logic.Carnap
                      , Carnap.Languages.DefiniteDescription.Syntax
                      , Carnap.Languages.DefiniteDescription.Semantics
                      , Carnap.Languages.DefiniteDescription.Util

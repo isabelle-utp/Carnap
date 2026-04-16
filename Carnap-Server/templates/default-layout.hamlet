@@ -17,6 +17,9 @@
                                 _{MsgLayoutBook}
                     $nothing
                         <a href=@{BookR}>_{MsgLayoutBook}
+                <li>
+                    <a href="@{ServeR "examples" ["hoarith.md"]}">
+                        Examples
                 $maybe (Entity _ user) <- authmaybe
                     <li.dropdown>
                             $maybe Entity _ userdata <- mud

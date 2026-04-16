@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, MonoLocalBinds #-}
 module Carnap.Languages.ModalPropositional.Parser
     (modalPropFormulaParser,worldTheoryPropFormulaParser, absoluteModalPropFormulaParser, relativeModalPropFormulaParser, absoluteModalPropFormulaPreParser)
 where
@@ -131,7 +131,7 @@ worldTheoryOpTable opts = [ [Prefix (try parseNeg), Prefix (try parseNec), Prefi
 parseWorldIndexer :: Monad m => ModalPropositionalParserOptions WorldTheoryPropLexicon u m -> ParsecT String u m (WorldTheoryForm -> WorldTheoryForm)
 parseWorldIndexer opts = do char '/'
                             term <- parseWorld <|> vparse
-                            return (\x -> x `atWorld` term)
+                            return (`atWorld` term)
     where vparse = case freeVarParser opts of
                        Just vp -> vp
                        _ -> parserZero

@@ -1,5 +1,5 @@
 {-#LANGUAGE RankNTypes, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
-module Carnap.Languages.HigherOrderArithmetic.Logic.Carnap (hoArithCalc) where
+module Carnap.Languages.HigherOrderArithmetic.Logic.Carnap (hoArithCalc, HOArithLogic(..)) where
 
 import Carnap.Core.Data.Types
 import Carnap.Languages.PureFirstOrder.Syntax (fogamma)

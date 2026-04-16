@@ -1,6 +1,7 @@
 {-#LANGUAGE ConstraintKinds, StandaloneDeriving, RankNTypes, ScopedTypeVariables, FlexibleContexts, FlexibleInstances, UndecidableInstances, MultiParamTypeClasses #-}
 module Carnap.Languages.PureFirstOrder.Logic.OpenLogic
-( parseOpenLogicAxFONK, parseOpenLogicFONK, openLogicFONKCalc, OpenLogicAxFONK(..), OpenLogicFONK(..), olpFOLKCalc, olpFOLJCalc) where
+( parseOpenLogicAxFONK, parseOpenLogicFONK, openLogicFONKCalc, OpenLogicAxFONK(..), OpenLogicFONK(..)
+, olpFOLKCalc, olpFOLJCalc, OpenLogicFOLK(..), OpenLogicFOLJ(..), parseOpenLogicFOLK, parseOpenLogicFOLJ) where
 
 import Text.Parsec
 import Data.List

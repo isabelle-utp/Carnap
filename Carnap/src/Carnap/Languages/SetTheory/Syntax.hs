@@ -1,5 +1,5 @@
 {-#LANGUAGE UndecidableInstances, FlexibleInstances, MultiParamTypeClasses, TypeOperators, ScopedTypeVariables, PatternSynonyms, RankNTypes, FlexibleContexts #-}
-module Carnap.Languages.SetTheory.Syntax 
+module Carnap.Languages.SetTheory.Syntax
 where
 
 import Data.Typeable
@@ -28,8 +28,8 @@ type SetTheoryStringPred = StringPred Bool Int
 
 type SetTheoryStringFunc = StringFunc Int Int
 
-type OpenLexiconST a = CoreLexicon :|: Predicate SetTheoryElem :|: Predicate SetTheoryEq 
-                                   :|: Predicate PureSchematicPred :|: Function PureSchematicFunction :|: Function PureFunction 
+type OpenLexiconST a = CoreLexicon :|: Predicate SetTheoryElem :|: Predicate SetTheoryEq
+                                   :|: Predicate PureSchematicPred :|: Function PureSchematicFunction :|: Function PureFunction
                                    :|: a
 --XXX: as an extension of FOL, this falls under all the classes of PureFirstOrderLexWith a = CoreLexicon :|: a
 --The function symbols are not necessarily exposed by the parser, but are necessary for things like skolemization
@@ -41,17 +41,17 @@ instance PrismPolyadicSchematicFunction (OpenLexiconST a) Int Int
 instance PrismPolyadicFunction (OpenLexiconST a) Int Int
 instance PrismTermElements (OpenLexiconST a) Int Bool
 instance PrismTermEquality (OpenLexiconST a) Int Bool
-        
+
 instance {-#OVERLAPPABLE#-} Incrementable (OpenLexiconST a) (Term Int) where
     incHead = const Nothing
-        & outside (_spredIdx') .~ (\(n,a) -> Just $ pphin n (ASucc a))
-        & outside (_funcIdx')  .~ (\(n,a) -> Just $ pfn n (ASucc a))
-        & outside (_sfuncIdx') .~ (\(n,a) -> Just $ spfn n (ASucc a))
-        where _spredIdx' :: Typeable ret => Prism' (OpenLanguageST a ret) (Int, Arity (Term Int) (Form Bool) ret) 
+        & outside _spredIdx' .~ (\(n,a) -> Just $ pphin n (ASucc a))
+        & outside _funcIdx'  .~ (\(n,a) -> Just $ pfn n (ASucc a))
+        & outside _sfuncIdx' .~ (\(n,a) -> Just $ spfn n (ASucc a))
+        where _spredIdx' :: Typeable ret => Prism' (OpenLanguageST a ret) (Int, Arity (Term Int) (Form Bool) ret)
               _spredIdx' = _spredIdx
-              _funcIdx' :: Typeable ret => Prism' (OpenLanguageST a ret) (Int, Arity (Term Int) (Term Int) ret) 
+              _funcIdx' :: Typeable ret => Prism' (OpenLanguageST a ret) (Int, Arity (Term Int) (Term Int) ret)
               _funcIdx' = _funcIdx
-              _sfuncIdx' :: Typeable ret => Prism' (OpenLanguageST a ret) (Int, Arity (Term Int) (Term Int) ret) 
+              _sfuncIdx' :: Typeable ret => Prism' (OpenLanguageST a ret) (Int, Arity (Term Int) (Term Int) ret)
               _sfuncIdx' = _sfuncIdx
 
 -------------------------------------
@@ -77,20 +77,20 @@ instance PrismPolyadicStringFunction (ExtendedStrictSetTheoryLexOpen a) Int Int
 
 instance {-#OVERLAPPABLE#-} Incrementable (ExtendedStrictSetTheoryLexOpen a) (Term Int) where
     incHead = const Nothing
-        & outside (_stringPred')  .~ (\(s,a) -> Just $ stringPred s (ASucc a))
-        & outside (_spredIdx') .~ (\(n,a) -> Just $ pphin n (ASucc a))
-        & outside (_stringFunc') .~ (\(s,a) -> Just $ stringFunc s (ASucc a))
-        & outside (_sfuncIdx') .~ (\(n,a) -> Just $ spfn n (ASucc a))
-        & outside (_funcIdx')  .~ (\(n,a) -> Just $ pfn n (ASucc a))
-        where _stringPred' :: Typeable ret => Prism' (FixLang (ExtendedStrictSetTheoryLexOpen a) ret) (String, Arity (Term Int) (Form Bool) ret) 
+        & outside _stringPred'  .~ (\(s,a) -> Just $ stringPred s (ASucc a))
+        & outside _spredIdx' .~ (\(n,a) -> Just $ pphin n (ASucc a))
+        & outside _stringFunc' .~ (\(s,a) -> Just $ stringFunc s (ASucc a))
+        & outside _sfuncIdx' .~ (\(n,a) -> Just $ spfn n (ASucc a))
+        & outside _funcIdx'  .~ (\(n,a) -> Just $ pfn n (ASucc a))
+        where _stringPred' :: Typeable ret => Prism' (FixLang (ExtendedStrictSetTheoryLexOpen a) ret) (String, Arity (Term Int) (Form Bool) ret)
               _stringPred' = _stringPred
-              _spredIdx' :: Typeable ret => Prism' (FixLang (ExtendedStrictSetTheoryLexOpen a) ret) (Int, Arity (Term Int) (Form Bool) ret) 
+              _spredIdx' :: Typeable ret => Prism' (FixLang (ExtendedStrictSetTheoryLexOpen a) ret) (Int, Arity (Term Int) (Form Bool) ret)
               _spredIdx' = _spredIdx
-              _funcIdx' :: Typeable ret => Prism' (FixLang (ExtendedStrictSetTheoryLexOpen a) ret) (Int, Arity (Term Int) (Term Int) ret) 
+              _funcIdx' :: Typeable ret => Prism' (FixLang (ExtendedStrictSetTheoryLexOpen a) ret) (Int, Arity (Term Int) (Term Int) ret)
               _funcIdx' = _funcIdx
-              _sfuncIdx' :: Typeable ret => Prism' (FixLang (ExtendedStrictSetTheoryLexOpen a) ret) (Int, Arity (Term Int) (Term Int) ret) 
+              _sfuncIdx' :: Typeable ret => Prism' (FixLang (ExtendedStrictSetTheoryLexOpen a) ret) (Int, Arity (Term Int) (Term Int) ret)
               _sfuncIdx' = _sfuncIdx
-              _stringFunc' :: Typeable ret => Prism' (FixLang (ExtendedStrictSetTheoryLexOpen a) ret) (String, Arity (Term Int) (Term Int) ret) 
+              _stringFunc' :: Typeable ret => Prism' (FixLang (ExtendedStrictSetTheoryLexOpen a) ret) (String, Arity (Term Int) (Term Int) ret)
               _stringFunc' = _stringFunc
 
 -----------------------------------------
@@ -136,7 +136,7 @@ type SeparativeSetTheoryLangOpen a = FixLang (SeparativeSetTheoryLexOpen a)
 type SeparativeSetTheoryLang = FixLang SeparativeSetTheoryLex
 
 instance Schematizable (a (SeparativeSetTheoryLangOpen a))
-        => CopulaSchema (SeparativeSetTheoryLangOpen a) where 
+        => CopulaSchema (SeparativeSetTheoryLangOpen a) where
 
     appSchema t@(x :!$: y) (LLam f) e = case ( castTo x :: Maybe (SeparativeSetTheoryLangOpen a (Term Int -> (Term Int -> Form Bool) -> Term Int))
                                              , castTo (LLam f) :: Maybe (SeparativeSetTheoryLangOpen a (Term Int -> Form Bool))) of
@@ -169,7 +169,7 @@ type ExtendedSeparativeSetTheoryLang = FixLang ExtendedSeparativeSetTheoryLex
 instance PrismSeparating (ExtendedSeparativeSetTheoryLexOpen a) Int Bool
 
 instance Schematizable (a (ExtendedSeparativeSetTheoryLangOpen a))
-        => CopulaSchema (ExtendedSeparativeSetTheoryLangOpen a) where 
+        => CopulaSchema (ExtendedSeparativeSetTheoryLangOpen a) where
 
     appSchema t@(x :!$: y) (LLam f) e = case ( castTo x :: Maybe (ExtendedSeparativeSetTheoryLangOpen a (Term Int -> (Term Int -> Form Bool) -> Term Int))
                                              , castTo (LLam f) :: Maybe (ExtendedSeparativeSetTheoryLangOpen a (Term Int -> Form Bool))) of
