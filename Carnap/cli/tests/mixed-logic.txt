@@ -1,0 +1,24 @@
+-- Test switching logic mid-file and inheriting command-line default
+
+-- Uses default logic from command line (fosterAndLaursenTFL)
+lemma PropFromCLI: P /\ Q |- P
+begin
+P /\ Q :PR
+P :/\E 1
+end
+
+-- Override for a block
+lemma FOLOverride in firstOrder: Ax F(x) |- F(a)
+begin
+Ax F(x) :PR
+F(a) :UI 1
+end
+
+-- Switch default for rest of file
+logic firstOrder
+
+lemma FOLFromDecl: Ax F(x) |- F(a)
+begin
+Ax F(x) :PR
+F(a) :UI 1
+end

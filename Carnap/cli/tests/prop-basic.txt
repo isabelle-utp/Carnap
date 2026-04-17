@@ -1,0 +1,7 @@
+-- Single lemma with explicit logic and goal
+
+lemma AndElimLeft in fosterAndLaursenTFL: P /\ Q |- P
+begin
+P /\ Q :PR
+P :/\E 1
+end

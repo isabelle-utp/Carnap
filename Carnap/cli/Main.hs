@@ -7,15 +7,22 @@ import System.Exit (exitFailure, exitSuccess)
 import System.IO (hPutStrLn, stderr)
 import Control.Applicative ((<|>))
 import Carnap.Calculi.NaturalDeduction.Syntax
-    (NaturalDeductionCalc(..), Feedback(..), Inference)
+    (NaturalDeductionCalc(..), Feedback(..), SupportsND)
 import Carnap.Calculi.NaturalDeduction.Checker (toDisplaySequence)
 import Carnap.Calculi.Util
     (ProofErrorMessage(..), defaultRuntimeDeductionConfig)
-import Carnap.Languages.PurePropositional.Syntax (PurePropLexicon)
+import Carnap.Core.Data.Optics (PrismSubstitutionalVariable)
+import Carnap.Core.Unification.Unification (MonadVar)
+import Carnap.Languages.ClassicalSequent.Syntax (ClassicalSequentOver, Sequent, Sequentable)
 import Carnap.Languages.PurePropositional.Logic (ofPropSys)
-import Carnap.Languages.PureFirstOrder.Syntax (PureLexiconFOL)
 import Carnap.Languages.PureFirstOrder.Logic (ofFOLSys)
-import Carnap.Core.Data.Types (Form(..))
+import Carnap.Languages.ModalPropositional.Logic (ofModalPropSys)
+import Carnap.Languages.ModalFirstOrder.Logic (hardegreeMPLCalc)
+import Carnap.Languages.PureSecondOrder.Logic (ofSecondOrderSys)
+import Carnap.Languages.SetTheory.Logic (ofSetTheorySys)
+import Carnap.Languages.HigherOrderArithmetic.Logic (ofHigherOrderArithmeticSys)
+import Carnap.Languages.DefiniteDescription.Logic.Gamut (ofDefiniteDescSys)
+import Control.Monad.State (State)
 import Data.Char (isSpace)
 import Text.Parsec.Error (errorMessages, errorPos, showErrorMessages)
 import Text.Parsec.Pos (sourceColumn)
@@ -29,6 +36,12 @@ main = do
             proofText <- readFile filepath
             let result = dispatchProp proofText sys
                      <|> dispatchFOL  proofText sys
+                     <|> dispatchModalProp proofText sys
+                     <|> dispatchModalFOL proofText sys
+                     <|> dispatchSecondOrder proofText sys
+                     <|> dispatchSetTheory proofText sys
+                     <|> dispatchHOArith proofText sys
+                     <|> dispatchDefiniteDesc proofText sys
             case result of
                 Nothing -> do
                     hPutStrLn stderr $ "Unknown system: " ++ sys
@@ -40,25 +53,43 @@ main = do
             hPutStrLn stderr "       carnap-check --list"
             exitFailure
 
+runCalc :: ( SupportsND r lex sem
+           , Sequentable lex
+           , PrismSubstitutionalVariable lex
+           , MonadVar (ClassicalSequentOver lex) (State Int)
+           , Show (ClassicalSequentOver lex (Sequent sem))
+           ) => String -> NaturalDeductionCalc r lex sem -> IO ()
+runCalc proofText ndcalc = do
+    let pt  = strip proofText
+        ded = ndParseProof ndcalc defaultRuntimeDeductionConfig pt
+        Feedback mseq ds = toDisplaySequence (ndProcessLine ndcalc) ded
+    presentResults (show <$> mseq) ds
+
 dispatchProp :: String -> String -> Maybe (IO ())
-dispatchProp proofText = ofPropSys go
-    where go :: (Show r, Inference r PurePropLexicon (Form Bool))
-             => NaturalDeductionCalc r PurePropLexicon (Form Bool) -> IO ()
-          go ndcalc = do
-              let pt  = strip proofText
-                  ded = ndParseProof ndcalc defaultRuntimeDeductionConfig pt
-                  Feedback mseq ds = toDisplaySequence (ndProcessLine ndcalc) ded
-              presentResults (show <$> mseq) ds
+dispatchProp proofText = ofPropSys (runCalc proofText)
 
 dispatchFOL :: String -> String -> Maybe (IO ())
-dispatchFOL proofText = ofFOLSys go
-    where go :: (Show r, Inference r PureLexiconFOL (Form Bool))
-             => NaturalDeductionCalc r PureLexiconFOL (Form Bool) -> IO ()
-          go ndcalc = do
-              let pt  = strip proofText
-                  ded = ndParseProof ndcalc defaultRuntimeDeductionConfig pt
-                  Feedback mseq ds = toDisplaySequence (ndProcessLine ndcalc) ded
-              presentResults (show <$> mseq) ds
+dispatchFOL proofText = ofFOLSys (runCalc proofText)
+
+dispatchModalProp :: String -> String -> Maybe (IO ())
+dispatchModalProp proofText = ofModalPropSys (runCalc proofText)
+
+dispatchModalFOL :: String -> String -> Maybe (IO ())
+dispatchModalFOL proofText sys
+    | sys == "hardegreeMPL" = Just (runCalc proofText hardegreeMPLCalc)
+    | otherwise             = Nothing
+
+dispatchSecondOrder :: String -> String -> Maybe (IO ())
+dispatchSecondOrder proofText = ofSecondOrderSys (runCalc proofText)
+
+dispatchSetTheory :: String -> String -> Maybe (IO ())
+dispatchSetTheory proofText = ofSetTheorySys (runCalc proofText)
+
+dispatchHOArith :: String -> String -> Maybe (IO ())
+dispatchHOArith proofText = ofHigherOrderArithmeticSys (runCalc proofText)
+
+dispatchDefiniteDesc :: String -> String -> Maybe (IO ())
+dispatchDefiniteDesc proofText = ofDefiniteDescSys (runCalc proofText)
 
 strip :: String -> String
 strip = reverse . dropWhile isSpace . reverse . dropWhile isSpace
@@ -102,6 +133,24 @@ printSystems = do
     putStrLn ""
     putStrLn "First-order logic:"
     mapM_ (putStrLn . ("  " ++)) folSystems
+    putStrLn ""
+    putStrLn "Modal propositional logic:"
+    mapM_ (putStrLn . ("  " ++)) modalPropSystems
+    putStrLn ""
+    putStrLn "Modal first-order logic:"
+    mapM_ (putStrLn . ("  " ++)) modalFOLSystems
+    putStrLn ""
+    putStrLn "Second-order logic:"
+    mapM_ (putStrLn . ("  " ++)) secondOrderSystems
+    putStrLn ""
+    putStrLn "Set theory:"
+    mapM_ (putStrLn . ("  " ++)) setTheorySystems
+    putStrLn ""
+    putStrLn "Higher-order arithmetic:"
+    mapM_ (putStrLn . ("  " ++)) hoArithSystems
+    putStrLn ""
+    putStrLn "Definite descriptions:"
+    mapM_ (putStrLn . ("  " ++)) definiteDescSystems
 
 propSystems :: [String]
 propSystems =
@@ -163,4 +212,44 @@ folSystems =
     , "tomassiQL"
     , "winklerFOL"
     , "zachFOLEq"
+    ]
+
+modalPropSystems :: [String]
+modalPropSystems =
+    [ "hardegreeB"
+    , "hardegreeD"
+    , "hardegreeK"
+    , "hardegreeL"
+    , "hardegreeT"
+    , "hardegreeWTL"
+    , "hardegree4"
+    , "hardegree5"
+    ]
+
+modalFOLSystems :: [String]
+modalFOLSystems =
+    [ "hardegreeMPL"
+    ]
+
+secondOrderSystems :: [String]
+secondOrderSystems =
+    [ "gamutNDSOL"
+    , "polyadicSecondOrder"
+    , "secondOrder"
+    ]
+
+setTheorySystems :: [String]
+setTheorySystems =
+    [ "elementarySetTheory"
+    , "separativeSetTheory"
+    ]
+
+hoArithSystems :: [String]
+hoArithSystems =
+    [ "openLogicExHOArith"
+    ]
+
+definiteDescSystems :: [String]
+definiteDescSystems =
+    [ "gamutNDDesc"
     ]

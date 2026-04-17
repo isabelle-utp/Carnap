@@ -1,0 +1,28 @@
+-- First-order logic tests
+-- predicates: F G H I J K L M N O   (upper-case, require parens: F(x))
+-- constants:  a b c d e
+-- variables:  v w x y z
+-- quantifiers: A (universal), E (existential)
+
+logic firstOrder
+
+lemma UniversalInstantiation: Ax F(x) |- F(a)
+begin
+Ax F(x) :PR
+F(a) :UI 1
+end
+
+-- No goal: just report what was proven
+lemma ModusPonens
+begin
+F(a) -> G(a) :PR
+F(a) :PR
+G(a) :MP 1,2
+end
+
+-- Wrong goal: should fail
+lemma WrongFOLGoal: Ax F(x) |- G(a)
+begin
+Ax F(x) :PR
+F(a) :UI 1
+end

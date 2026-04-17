@@ -1,0 +1,48 @@
+-- Multi-lemma propositional logic test suite
+
+logic fosterAndLaursenTFL
+
+-- Goal matches: should report the proven sequent
+lemma AndElimLeft: P /\ Q |- P
+begin
+P /\ Q :PR
+P :/\E 1
+end
+
+-- Larger proof: no goal, just report what was proven
+lemma DisjSylCombo
+begin
+P /\ Q :PR
+P :/\E 1
+Q :/\E 1
+~Q \/ R :PR
+  ~Q :AS
+  _|_ :~E 5,3
+  R :X 6
+--
+  R :AS
+  R :R 9
+R :\/E 4,5-7,9-10
+(P /\ Q) /\ R :/\I 1,11
+end
+
+-- Wrong goal: proven sequent is P /\ Q ⊢ P, goal asks for P ⊢ P
+lemma WrongGoal: P |- P
+begin
+P /\ Q :PR
+P :/\E 1
+end
+
+-- Override logic for a single lemma
+lemma AndElimFOL in fosterAndLaursenTFL: P /\ Q |- P
+begin
+P /\ Q :PR
+P :/\E 1
+end
+
+-- Invalid proof: /\I requires two lines
+lemma InvalidProof: P /\ Q |- P /\ Q
+begin
+P /\ Q :PR
+P /\ Q :/\I 1
+end
