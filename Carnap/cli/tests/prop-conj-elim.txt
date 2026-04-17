@@ -1,2 +1,9 @@
+-- Minimal single-lemma proof, name-only (no explicit goal)
+
+logic fosterAndLaursenTFL
+
+lemma AndElim
+begin
 P/\Q :PR
 P :/\E 1
+end
