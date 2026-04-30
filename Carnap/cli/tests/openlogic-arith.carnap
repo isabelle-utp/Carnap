@@ -1,0 +1,250 @@
+-- Comprehensive showcase of the openLogicExHOArith logic.
+--
+-- Rules available (Carnap Montague-style natural deduction):
+--   Propositional: PR, AS, MP, MT, DD, DN (DNE/DNI), CD, ID,
+--                  ADJ, S, ADD, MTP, BC, CB
+--   Quantifier:    UI, UD, EG, ED, QN
+--   Identity:      Id (=Intro), LL (Leibniz), Sm (symmetry)
+--
+-- Arithmetic vocabulary: 0, ' (successor), +, *, <, =
+-- The Montague parser does not accept the falsum constant !?; absurdity
+-- is handled classically via ID subproofs or via ADD+MTP (EFQ).
+
+logic openLogicExHOArith
+
+--------------------------------------------------------------------------------
+-- Propositional fragment
+--------------------------------------------------------------------------------
+
+lemma ModusPonens: F(a) -> G(a), F(a) |- G(a)
+begin
+F(a) -> G(a) :PR
+F(a) :PR
+G(a) :MP 1, 2
+end
+
+lemma ModusTollens: F(a) -> G(a), ~G(a) |- ~F(a)
+begin
+F(a) -> G(a) :PR
+~G(a) :PR
+~F(a) :MT 1, 2
+end
+
+lemma DoubleNegationIntro: F(a) |- ~~F(a)
+begin
+F(a) :PR
+~~F(a) :DN 1
+end
+
+lemma DoubleNegationElim: ~~F(a) |- F(a)
+begin
+~~F(a) :PR
+F(a) :DN 1
+end
+
+lemma AndIntro: F(a), G(a) |- F(a) /\ G(a)
+begin
+F(a) :PR
+G(a) :PR
+F(a) /\ G(a) :ADJ 1, 2
+end
+
+lemma AndElimLeft: F(a) /\ G(a) |- F(a)
+begin
+F(a) /\ G(a) :PR
+F(a) :S 1
+end
+
+lemma OrIntro: F(a) |- F(a) \/ G(a)
+begin
+F(a) :PR
+F(a) \/ G(a) :ADD 1
+end
+
+lemma DisjunctiveSyllogism: ~F(a), F(a) \/ G(a) |- G(a)
+begin
+~F(a) :PR
+F(a) \/ G(a) :PR
+G(a) :MTP 2, 1
+end
+
+lemma BiconditionalElim: F(a) <-> G(a), F(a) |- G(a)
+begin
+F(a) <-> G(a) :PR
+F(a) :PR
+F(a) -> G(a) :BC 1
+G(a) :MP 3, 2
+end
+
+lemma BiconditionalIntro: F(a) -> G(a), G(a) -> F(a) |- F(a) <-> G(a)
+begin
+F(a) -> G(a) :PR
+G(a) -> F(a) :PR
+F(a) <-> G(a) :CB 1, 2
+end
+
+-- Ex falso quodlibet via ADD + MTP (no falsum constant needed)
+lemma ExFalsoQuodlibet: ~F(a), F(a) |- G(a)
+begin
+F(a) :PR
+~F(a) :PR
+F(a) \/ G(a) :ADD 1
+G(a) :MTP 3, 2
+end
+
+--------------------------------------------------------------------------------
+-- Conditional and indirect derivation (Show / DD / CD / ID)
+--------------------------------------------------------------------------------
+
+lemma HypotheticalSyllogism: G(a) -> H(a), F(a) -> G(a) |- F(a) -> H(a)
+begin
+Show F(a) -> H(a)
+   F(a) :AS
+   G(a) -> H(a) :PR
+   F(a) -> G(a) :PR
+   G(a) :MP 4, 2
+   H(a) :MP 3, 5
+:CD 6
+end
+
+-- Classical reductio: the Show's assumption participates in the contradiction.
+lemma ReductioContrapositive: F(a) -> G(a), ~G(a) |- ~F(a)
+begin
+Show ~F(a)
+   F(a) :AS
+   F(a) -> G(a) :PR
+   G(a) :MP 3, 2
+   ~G(a) :PR
+:ID 4, 5
+end
+
+--------------------------------------------------------------------------------
+-- Quantifier rules
+--------------------------------------------------------------------------------
+
+lemma UniversalInstantiation: Ax F(x) |- F(a)
+begin
+Ax F(x) :PR
+F(a) :UI 1
+end
+
+lemma ExistentialGeneralization: F(a) |- Ex F(x)
+begin
+F(a) :PR
+Ex F(x) :EG 1
+end
+
+lemma UniversalDerivation: Ax(F(x) -> G(x)), Ax F(x) |- Ax G(x)
+begin
+Show Ax G(x)
+   Show G(a)
+      Ax(F(x) -> G(x)) :PR
+      Ax F(x) :PR
+      F(a) -> G(a) :UI 3
+      F(a) :UI 4
+      G(a) :MP 5, 6
+   :DD 7
+:UD 2
+end
+
+lemma QuantifierNegation: ~Ex F(x) |- Ax ~F(x)
+begin
+Show Ax ~F(x)
+   Show ~F(a)
+      F(a) :AS
+      Ex F(x) :EG 3
+      ~Ex F(x) :PR
+   :ID 4, 5
+:UD 2
+end
+
+--------------------------------------------------------------------------------
+-- Identity: =Intro (Id), Leibniz (LL), symmetry (Sm)
+--------------------------------------------------------------------------------
+
+-- No goal line: the checker reports whatever sequent was proved.
+lemma IdentityReflexive
+begin
+Show a = a
+   a = a :Id
+:DD 2
+end
+
+lemma LeibnizSubstitution: F(a), a = b |- F(b)
+begin
+F(a) :PR
+a = b :PR
+F(b) :LL 2, 1
+end
+
+lemma IdentitySymmetry: a = b |- b = a
+begin
+a = b :PR
+b = a :Sm 1
+end
+
+--------------------------------------------------------------------------------
+-- Arithmetic (0, successor ', +, *, <)
+--------------------------------------------------------------------------------
+
+lemma ZeroEqualsZero
+begin
+Show 0 = 0
+   0 = 0' :Id
+:DD 2
+end
+
+-- A Peano-style universal premise instantiated at a concrete numeral.
+lemma SuccessorIdentity: Ax(x + 0 = x) |- 0' + 0 = 0'
+begin
+Ax(x + 0 = x) :PR
+0' + 0 = 0' :UI 1
+end
+
+-- Induction-base pattern: chain successor applications from F(0) to F(0''').
+lemma InductionThreeSteps: Ax(F(x) -> F(x')), F(0) |- F(0''')
+begin
+Ax(F(x) -> F(x')) :PR
+F(0) :PR
+F(0) -> F(0') :UI 1
+F(0') :MP 3, 2
+F(0') -> F(0'') :UI 1
+F(0'') :MP 5, 4
+F(0'') -> F(0''') :UI 1
+F(0''') :MP 7, 6
+end
+
+-- The lemma originally requested: Peano's "zero is never a successor"
+-- axiom, added as a premise, makes 0 = 0' absurd, so any F(0) follows.
+lemma ZeroSuccContradiction: Ax ~(0 = x'), 0 = 0' |- F(0)
+begin
+Ax ~(0 = x') :PR
+~(0 = 0') :UI 1
+0 = 0' :PR
+(0 = 0') \/ F(0) :ADD 3
+F(0) :MTP 4, 2
+end
+
+-- Substituting equals for equals in arithmetic terms.
+lemma ArithSubstitution: a + 0 = a, a = b |- b + 0 = b
+begin
+a + 0 = a :PR
+a = b :PR
+b + 0 = b :LL 2, 1
+end
+
+-- Transitivity of less-than, used with concrete numerals.
+-- Transitivity of less-than. Note the extra parens around each `<` atom:
+-- the Montague parser has trouble with a successor `'` immediately before
+-- `/\` inside a single parenthesised conjunction.
+lemma LtTransitivity: AxAyAz(((x < y) /\ (y < z)) -> x < z), 0 < 0', 0' < 0'' |- 0 < 0''
+begin
+AxAyAz(((x < y) /\ (y < z)) -> x < z) :PR
+0 < 0' :PR
+0' < 0'' :PR
+AyAz(((0 < y) /\ (y < z)) -> 0 < z) :UI 1
+Az(((0 < 0') /\ (0' < z)) -> 0 < z) :UI 4
+((0 < 0') /\ (0' < 0'')) -> 0 < 0'' :UI 5
+(0 < 0') /\ (0' < 0'') :ADJ 2, 3
+0 < 0'' :MP 6, 7
+end

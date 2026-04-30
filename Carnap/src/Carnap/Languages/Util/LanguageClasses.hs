@@ -854,6 +854,26 @@ class (Typeable c, Typeable b, PrismLink (FixLang lex) (Predicate (Accessor b c)
 instance {-#OVERLAPPABLE#-} PrismAccessor lex c b => AccessorLanguage (FixLang lex (Form b)) (FixLang lex (Term c)) where
         accesses = curry $ review (binaryOpPrism _access)
 
+class IteratedSumLanguage t where
+        iteratedSum :: String -> t -> (t -> t) -> t
+
+class (Typeable b, PrismLink (FixLang lex) (BoundedSum b (FixLang lex)))
+        => PrismBoundedSum lex b | lex -> b where
+
+        _bsum :: Prism' (FixLang lex (Term b -> (Term b -> Term b) -> Term b)) String
+        _bsum = link_bsum . bsumPrism
+
+        link_bsum :: Prism' (FixLang lex (Term b -> (Term b -> Term b) -> Term b))
+                            (BoundedSum b (FixLang lex) (Term b -> (Term b -> Term b) -> Term b))
+        link_bsum = link
+
+        bsumPrism :: Prism' (BoundedSum b (FixLang lex) (Term b -> (Term b -> Term b) -> Term b)) String
+        bsumPrism = prism' BoundedSum (\(BoundedSum s) -> Just s)
+
+instance {-#OVERLAPPABLE#-}
+        (PrismBoundedSum lex b) => IteratedSumLanguage (FixLang lex (Term b)) where
+        iteratedSum s n f = (curry (review $ binaryOpPrism (_bsum . only s))) n (LLam f)
+
 class SeparatingLang l t where
         separate :: String -> t -> (t -> l) -> t
 

@@ -30,6 +30,7 @@ import Carnap.Languages.ModalFirstOrder.Logic (hardegreeMPLCalc)
 import Carnap.Languages.PureSecondOrder.Logic (ofSecondOrderSys)
 import Carnap.Languages.SetTheory.Logic (ofSetTheorySys)
 import Carnap.Languages.HigherOrderArithmetic.Logic (ofHigherOrderArithmeticSys)
+import Carnap.Languages.HOArithSum.Logic (ofHOArithSumSys)
 import Carnap.Languages.DefiniteDescription.Logic.Gamut (ofDefiniteDescSys)
 
 --------------------------------------------------------------------------------
@@ -234,6 +235,7 @@ checkLemmaInSystem name sys mgoal proof =
         <|> (runCheck name sys mgoal proof `ofSecondOrderSys` sys)
         <|> (runCheck name sys mgoal proof `ofSetTheorySys` sys)
         <|> (runCheck name sys mgoal proof `ofHigherOrderArithmeticSys` sys)
+        <|> (runCheck name sys mgoal proof `ofHOArithSumSys` sys)
         <|> (runCheck name sys mgoal proof `ofDefiniteDescSys` sys)
 
 runCheck :: ( SupportsND r lex sem
@@ -275,7 +277,7 @@ runCheck name sys mgoal proof calc = do
                     mapM_ (hPutStrLn stderr . prefixed name) errors
                     case mseq of
                         Just sq
-                          | show sq == show goalSeq -> do
+                          | normalizeSeq (show sq) == normalizeSeq (show goalSeq) -> do
                                 putStrLn $ "lemma " ++ name ++ " (" ++ sys ++ "): " ++ prettySeq sq
                                 return Proved
                           | otherwise -> do
@@ -290,6 +292,16 @@ runCheck name sys mgoal proof calc = do
 
 prefixed :: String -> String -> String
 prefixed name msg = "lemma " ++ name ++ ": " ++ msg
+
+-- The empty antecedent renders as ⊤ when produced by the goal parser
+-- (NilAntecedent) but as ∅ when produced as the lower sequent of a no-premise
+-- rule (NilCedent).  These are semantically equivalent; canonicalize for
+-- comparison.
+normalizeSeq :: String -> String
+normalizeSeq = go
+  where go ('⊤':' ':'⊢':rest) = '∅' : ' ' : '⊢' : go rest
+        go (c:cs) = c : go cs
+        go []     = []
 
 -- Rewrites `|-` to `⊢` so the user can type the sequent separator naturally
 -- while the sequent parser (which accepts `⊢` or `:|-:`) still works.
@@ -455,6 +467,7 @@ setTheorySystems =
 hoArithSystems :: [String]
 hoArithSystems =
     [ "openLogicExHOArith"
+    , "hoArithSumFL"
     ]
 
 definiteDescSystems :: [String]

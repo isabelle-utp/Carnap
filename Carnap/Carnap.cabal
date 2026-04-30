@@ -132,6 +132,11 @@ library
                      , Carnap.Languages.HigherOrderArithmetic.Logic.OpenLogic
                      , Carnap.Languages.HigherOrderArithmetic.Logic.Gentzen
                      , Carnap.Languages.HigherOrderArithmetic.Logic.Carnap
+                     , Carnap.Languages.HOArithSum.Syntax
+                     , Carnap.Languages.HOArithSum.Parser
+                     , Carnap.Languages.HOArithSum.Util
+                     , Carnap.Languages.HOArithSum.Logic
+                     , Carnap.Languages.HOArithSum.Logic.FosterLaursen
                      , Carnap.Languages.DefiniteDescription.Syntax
                      , Carnap.Languages.DefiniteDescription.Semantics
                      , Carnap.Languages.DefiniteDescription.Util

@@ -1,0 +1,8 @@
+-- Sanity test: bare reflexivity proved via eqReflexivity in fosterAndLaursenFOL.
+-- Useful baseline for how `Top :|-:` rules display when the goal has no premise.
+logic fosterAndLaursenFOL
+
+lemma EqRefl: |- a = a
+begin
+a = a :=I
+end

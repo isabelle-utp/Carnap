@@ -1,0 +1,29 @@
+-- Triangular-number closed form, 2·Σy=0..x. y = x·(x+1), proved by
+-- induction on x in hoArithSumFL (Fitch-style).
+--
+-- The induction rule cites the base-case line and a subproof from the
+-- assumption P(t) to a derivation of P(t').
+logic hoArithSumFL
+
+-- Sanity: base case in isolation.
+lemma TriangularBase: |- (0' + 0') * (Σx=0..0. x) = 0 * (0 + 0')
+begin
+Σx=0..0. x = 0 :ΣZ
+(0' + 0') * 0 = 0 * (0 + 0') :Poly
+(0' + 0') * (Σx=0..0. x) = 0 * (0 + 0') :LL 1, 2
+end
+
+lemma TriangularClosedForm: |- Ax((0'+0') * (Σy=0..x. y) = x * (x + 0'))
+begin
+Σy=0..0. y = 0 :ΣZ
+(0'+0') * 0 = 0 * (0 + 0') :Poly
+(0'+0') * (Σy=0..0. y) = 0 * (0 + 0') :LL 1, 2
+   (0'+0') * (Σy=0..t. y) = t * (t + 0') :AS
+   Σy=0..t'. y = (Σy=0..t. y) + t' :ΣS
+   (0'+0') * ((Σy=0..t. y) + t') = ((0'+0') * (Σy=0..t. y)) + ((0'+0') * t') :Poly
+   (0'+0') * (Σy=0..t'. y) = ((0'+0') * (Σy=0..t. y)) + ((0'+0') * t') :LL 5, 6
+   (0'+0') * (Σy=0..t'. y) = (t * (t + 0')) + ((0'+0') * t') :LL 4, 7
+   (t * (t + 0')) + ((0'+0') * t') = t' * (t' + 0') :Poly
+   (0'+0') * (Σy=0..t'. y) = t' * (t' + 0') :LL 9, 8
+Ax((0'+0') * (Σy=0..x. y) = x * (x + 0')) :Ind 3, 4-10
+end

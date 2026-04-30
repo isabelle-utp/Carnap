@@ -518,6 +518,21 @@ instance UniformlyEq (Accessor c b) where
 
 instance FirstOrderLex (Accessor c b)
 
+data BoundedSum b :: (* -> *) -> * -> * where
+        BoundedSum :: String -> BoundedSum b lang (Term b -> (Term b -> Term b) -> Term b)
+
+instance Schematizable (BoundedSum b lang) where
+        schematize (BoundedSum v) (n:body:_) = "(Σ" ++ v ++ "=0.." ++ n ++ ". " ++ body ++ ")"
+        schematize (BoundedSum v) _          = "(Σ" ++ v ++ "=0..)"
+
+instance UniformlyEq (BoundedSum b lang) where
+        _ =* _ = True
+
+instance FirstOrderLex (BoundedSum b lang)
+
+instance ReLex (BoundedSum b) where
+        relex (BoundedSum v) = (BoundedSum v)
+
 data Separation b c :: (* -> *) -> * -> * where
         Separation :: String -> Separation b c lang (Term b -> (Term b -> Form c) -> Term b)
 
