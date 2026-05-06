@@ -6,6 +6,7 @@ import           Data.Time.Clock.POSIX
 import           Import
 import           Text.Blaze.Html              (Markup, toMarkup)
 import           Text.Julius                  (juliusFile, rawJS)
+import           Control.Monad.State          (State)
 import           Text.Pandoc                  (Block, lookupMeta)
 import           TH.RelativePaths             (pathRelativeToCabalPackage)
 import           Yesod.Form.Bootstrap3
@@ -135,8 +136,8 @@ returnAssignment coursetitle filename (Entity key val) path = do
           tooLate t a Nothing = assignmentMetadataVisibleTill a < Just t
           tooLate t a (Just (Entity _ ex)) = (extensionUntil ex < t) && (assignmentMetadataVisibleTill a < Just t)
 
-assignmentFilters :: Int -> Block -> Block
-assignmentFilters salt = randomizeProblems salt . allFilters
+assignmentFilters :: Int -> Block -> State Int Block
+assignmentFilters salt b = randomizeProblems salt <$> allFilters b
 
 enterPasswordForm
     :: (MonadHandler m, RenderMessage (HandlerSite m) FormMessage)

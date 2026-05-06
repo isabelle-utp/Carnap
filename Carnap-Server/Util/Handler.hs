@@ -15,7 +15,8 @@ import           Text.Pandoc            (Inline (..), Meta, MetaValue (..),
                                          compileTemplate, getTemplate,
                                          lookupMeta, readerExtensions, runIO)
 import           Text.Pandoc            (Block)
-import           Text.Pandoc.Walk       (Walkable, walk)
+import           Text.Pandoc.Walk       (walkM)
+import           Control.Monad.State    (State, evalState)
 import           TH.RelativePaths       (pathRelativeToCabalPackage)
 import           Util.Data
 import           Util.Database
@@ -78,19 +79,20 @@ addDocScripts = do
         liftWidget . tellWidget $ GWData mempty mempty mempty mempty mempty (Just s) mempty
 
 -- * Pandoc
-allFilters :: Block -> Block
-allFilters = makeTreeDeduction
-             . makeCounterModelers
-             . makeProofChecker
-             . makeQualitativeProblems
-             . makeSequent
-             . makeSynCheckers
-             . makeTranslate
-             . makeTreeDeduction
-             . makeTruthTables
-             . makeTruthTrees
-             . makeAnchors
-             . renderFormulas
+allFilters :: Block -> State Int Block
+allFilters b = do
+    let pre = ( makeQualitativeProblems
+              . makeSequent
+              . makeSynCheckers
+              . makeTranslate
+              . makeTreeDeduction
+              . makeTruthTables
+              . makeTruthTrees
+              . makeAnchors
+              . renderFormulas
+              ) b
+    mid <- makeProofChecker pre
+    return $ (makeTreeDeduction . makeCounterModelers) mid
 
 retrievePandocVal :: MonadHandler m => Maybe MetaValue -> m (Maybe [Text])
 retrievePandocVal metaval = case metaval of
@@ -112,11 +114,11 @@ retrievePandocValPure metaval = case metaval of
     where fromStr (Str x) = Just x
           fromStr _       = Nothing
 
-fileToHtml :: Walkable a Pandoc => (a -> a) -> FilePath -> IO (Either String (Either PandocError Html, Meta))
+fileToHtml :: (Block -> State Int Block) -> FilePath -> IO (Either String (Either PandocError Html, Meta))
 fileToHtml filters path = do Markdown md <- markdownFromFile path
                              let md' = Markdown (filter ((/=) '\r') md) --remove carrage returns from dos files
                              case parseMarkdown yesodDefaultReaderOptions { readerExtensions = carnapPandocExtensions } md' of
-                                 Right pd -> do let pd'@(Pandoc meta _)= walk filters pd
+                                 Right pd -> do let pd'@(Pandoc meta _)= evalState (walkM filters pd) 0
                                                 templateOrErr <- templateFrom meta
                                                 case templateOrErr of
                                                     Right template -> return $ Right $ (write template pd', meta)

@@ -4,15 +4,21 @@ import Text.Pandoc
 import Data.Map (Map, unions, fromList, toList)
 import qualified Data.Text as T
 import Data.Text (Text)
+import Control.Monad.State (State, get, put)
 import Filter.Util (numof, intoChunks, formatChunk, unlines', exerciseWrapper)
 import Prelude
 
-makeProofChecker :: Block -> Block
+-- The Int state is a per-document counter used to give each Playground a
+-- unique saveAs key. Without this, all empty playgrounds of the same system
+-- on a page collide in localStorage.
+makeProofChecker :: Block -> State Int Block
 makeProofChecker cb@(CodeBlock (_,classes,extra) contents)
-    | "ProofChecker" `elem` classes = Div ("",[],[]) $ map (activate classes extra) $ intoChunks contents
-    | "Playground" `elem` classes = Div ("",[],[]) [toPlayground classes extra contents]
-    | otherwise = cb
-makeProofChecker x = x
+    | "ProofChecker" `elem` classes = return $ Div ("",[],[]) $ map (activate classes extra) $ intoChunks contents
+    | "Playground" `elem` classes = do n <- get
+                                       put (n + 1)
+                                       return $ Div ("",[],[]) [toPlayground n classes extra contents]
+    | otherwise = return cb
+makeProofChecker x = return x
 
 activate :: [Text] -> [(Text, Text)] -> Text -> Block
 activate cls extra chunk
@@ -136,8 +142,8 @@ activate cls extra chunk
           fixed = [("type","proofchecker"),("goal",seqof h),("submission", T.concat ["saveAs:", numof h])]
           exTemplate opts = template (unions [fromList extra, fromList opts, fromList fixed]) (numof h) (unlines' t)
 
-toPlayground :: [Text] -> [(Text, Text)] -> Text -> Block
-toPlayground cls extra content
+toPlayground :: Int -> [Text] -> [(Text, Text)] -> Text -> Block
+toPlayground n cls extra content
     | "AllenSL"          `elem` cls = playTemplate [("system", "allenSL")]
     | "AllenSLPlus"      `elem` cls = playTemplate [("system", "allenSLPlus")]
     | "ArthurSL"         `elem` cls = playTemplate [("system", "arthurSL"), ("guides", "indent"), ("options", "fonts resize")]
@@ -253,7 +259,9 @@ toPlayground cls extra content
     | "ZachTFL2019"      `elem` cls = playTemplate [("system", "thomasBolducAndZachTFL2019"), ("options","render")]
     | "ZachTFLCore"      `elem` cls = playTemplate [("system", "thomasBolducAndZachTFLCore"), ("options","render")]
     | otherwise = playTemplate []
-    where fixed = [("type","proofchecker")]
+    where fixed = [ ("type","proofchecker")
+                  , ("submission", T.concat ["saveAs:playground-", T.pack (show n)])
+                  ]
           playTemplate opts = template (unions [fromList extra, fromList opts, fromList fixed]) "Playground" (unlines' $ formatChunk content)
 
 template :: Map Text Text -> Text -> Text -> Block
