@@ -18,13 +18,13 @@ end
 -- Variant of induction rule with "+1" as the goal
 -- Keep successor versions of rules, create versions with +1 - e.g. S+ in addition to SS
 
-lemma TriangularClosedForm: |- Ax((1+1) * (Sy=0..x. y) = x * (x + 1))
+lemma TriangularClosedForm: |- Ax((1+1) * (Σy=0..x. y) = x * (x + 1))
 begin
 Σy=0..0. y = 0 :ΣZ
 (1+1) * 0 = 0 * (0 + 1) :Poly
 (1+1) * (Σy=0..0. y) = 0 * (0 + 1) :LL 1, 2
    (1+1) * (Σy=0..t. y) = t * (t + 1) :AS
-   Σy=0..t+1. y = (Σy=0..t. y) + (t+1) :ΣS
+   Σy=0..t'. y = (Σy=0..t. y) + t' :ΣS
    (1+1) * ((Σy=0..t. y) + t') = ((1+1) * (Σy=0..t. y)) + ((1+1) * t') :Poly
    (1+1) * (Σy=0..t'. y) = ((1+1) * (Σy=0..t. y)) + ((1+1) * t') :LL 5, 6
    (1+1) * (Σy=0..t'. y) = (t * (t + 1)) + ((1+1) * t') :LL 4, 7
