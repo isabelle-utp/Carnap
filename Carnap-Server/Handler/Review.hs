@@ -162,6 +162,7 @@ renderProblem due uidAndData (Entity key val) = do
                          data-carnap-options="resize"
                          data-carnap-type="proofchecker"
                          data-carnap-goal="#{goal}"
+                         data-carnap-storage-key="review-#{show key}"
                          data-carnap-submission="none">
                          #{der}
                 |]
@@ -173,6 +174,7 @@ renderProblem due uidAndData (Entity key val) = do
                          data-carnap-guides="#{guides}"
                          data-carnap-tests="#{tests}"
                          data-carnap-goal="#{formatContent (unpack goal)}"
+                         data-carnap-storage-key="review-#{show key}"
                          data-carnap-submission="none">
                          #{der}
                 |]

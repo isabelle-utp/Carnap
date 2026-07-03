@@ -8,20 +8,29 @@ import Control.Monad.State (State, get, put)
 import Filter.Util (numof, intoChunks, formatChunk, unlines', exerciseWrapper)
 import Prelude
 
--- The Int state is a per-document counter used to give each Playground a
--- unique saveAs key. Without this, all empty playgrounds of the same system
--- on a page collide in localStorage.
+-- The Int state is a per-document counter used to give each proof box (both
+-- exercises and Playgrounds) a unique storage key. Without this, proof boxes
+-- that share a goal/problem-number collide in localStorage.
 makeProofChecker :: Block -> State Int Block
 makeProofChecker cb@(CodeBlock (_,classes,extra) contents)
-    | "ProofChecker" `elem` classes = return $ Div ("",[],[]) $ map (activate classes extra) $ intoChunks contents
+    | "ProofChecker" `elem` classes = do chunks <- mapM (activate classes extra) (intoChunks contents)
+                                         return $ Div ("",[],[]) chunks
     | "Playground" `elem` classes = do n <- get
                                        put (n + 1)
                                        return $ Div ("",[],[]) [toPlayground n classes extra contents]
     | otherwise = return cb
 makeProofChecker x = return x
 
-activate :: [Text] -> [(Text, Text)] -> Text -> Block
-activate cls extra chunk
+activate :: [Text] -> [(Text, Text)] -> Text -> State Int Block
+activate cls extra chunk = do n <- get
+                              put (n + 1)
+                              return (activate' n cls extra chunk)
+
+-- The submission identifier stays the bare problem number ('numof h'), since
+-- that's how submissions are keyed in the gradebook; the per-document counter
+-- 'n' is only mixed into the separate storage-key so localStorage stays unique.
+activate' :: Int -> [Text] -> [(Text, Text)] -> Text -> Block
+activate' n cls extra chunk
     | "AllenSL"          `elem` cls = exTemplate [("system", "allenSL")]
     | "AllenSLPlus"      `elem` cls = exTemplate [("system", "allenSLPlus")]
     | "ArthurSL"         `elem` cls = exTemplate [("system", "arthurSL"), ("guides", "indent"), ("options", "fonts resize")]
@@ -139,7 +148,11 @@ activate cls extra chunk
     | otherwise = exTemplate []
     where seqof = T.dropWhile (/= ' ')
           (h:t) = formatChunk chunk
-          fixed = [("type","proofchecker"),("goal",seqof h),("submission", T.concat ["saveAs:", numof h])]
+          fixed = [ ("type","proofchecker")
+                  , ("goal",seqof h)
+                  , ("submission", T.concat ["saveAs:", numof h])
+                  , ("storage-key", T.concat [numof h, "-", T.pack (show n)])
+                  ]
           exTemplate opts = template (unions [fromList extra, fromList opts, fromList fixed]) (numof h) (unlines' t)
 
 toPlayground :: Int -> [Text] -> [(Text, Text)] -> Text -> Block

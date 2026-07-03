@@ -22,7 +22,7 @@ checker n thetype sys opts goal proof =
         [hamlet|
         <div class="exercise">
             <span>example #{show n}
-            <div data-carnap-type="#{thetype}" data-carnap-options="#{opts}" data-carnap-system="#{sys}" data-carnap-goal="#{goal}">
+            <div data-carnap-type="#{thetype}" data-carnap-options="#{opts}" data-carnap-system="#{sys}" data-carnap-goal="#{goal}" data-carnap-storage-key="info-#{show n}">
                 #{strip proof}
         |]
     where strip = dropWhile (== '\n')
