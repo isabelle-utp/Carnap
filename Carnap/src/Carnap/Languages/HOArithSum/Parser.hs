@@ -17,14 +17,21 @@ import Text.Parsec.Expr
 extendedSymbols :: [Char]
 extendedSymbols = ['_','>','#']
 
--- | '1' as syntactic sugar for Suc(0)
-parseOne :: (ElementaryArithmeticLanguage lang, Monad m) => ParsecT String u m lang
-parseOne = try $ spaces >> string "1" >> spaces >> return (arithSucc arithZero)
+-- | Numerals as syntactic sugar for iterated successors of zero, e.g. '3'
+-- for 0'''.
+parseNumeral :: (ElementaryArithmeticLanguage lang, Monad m) => ParsecT String u m lang
+parseNumeral = do spaces
+                  ds <- many1 digit
+                  spaces
+                  return $ iterate arithSucc arithZero !! read ds
 
--- | Σ x = 0 .. n . body  (also: Sum x = 0 .. n . body).
+-- | Σ x = 0 .. n . body  (also: Sum x = 0 .. n . body, or Sx = 0 .. n . body).
 -- The bound variable must come from the free-variable alphabet so that
 -- occurrences in the body parse as the same variable and are correctly
 -- captured.  Use one of @stuvwxyz@ for Σ-bound vars in this language.
+-- The whole prefix up to the '=' is parsed atomically, so an 'S' that is
+-- not followed by a bound variable and '=' (e.g. a predicate 'Sx') fails
+-- without consuming input.
 sumParser ::
     ( IteratedSumLanguage (FixLang lex (Term Int))
     , BoundVars lex
@@ -34,11 +41,12 @@ sumParser ::
       -> ParsecT String u m (FixLang lex (Term Int))   -- term parser
       -> ParsecT String u m (FixLang lex (Term Int))
 sumParser parseFreeV parseTerm =
-        do _ <- try (string "Σ") <|> try (string "Sum ") <|> try (string "sum ")
-           spaces
-           v <- parseFreeV
-           spaces
-           _ <- char '='
+        do v <- try $ do _ <- string "Σ" <|> string "S"
+                         spaces
+                         v <- parseFreeV
+                         spaces
+                         _ <- char '='
+                         return v
            spaces
            _ <- string "0"
            spaces
@@ -70,8 +78,7 @@ hoArithSumOptions = FirstOrderParserOptions
     , functionParser = Just (\x -> hoArithSumOpParser
                                        (parenParser x
                                         <|> powersetParser x
-                                        <|> try parseOne
-                                        <|> parseZero
+                                        <|> try parseNumeral
                                         <|> try parseEmptySet
                                         <|> try (parseFunctionString extendedSymbols x)
                                         <|> vparser

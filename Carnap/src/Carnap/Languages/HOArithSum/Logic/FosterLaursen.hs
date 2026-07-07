@@ -42,10 +42,10 @@ data HOArithSumFL
     | DefSub1 | DefSub2
     | DefSep1 | DefSep2 | DefSep3 | DefSep4
     -- new arithmetic / sum rules
-    | Induction
+    | Induction | InductionPlus
     | PolyEq
     | SumZero
-    | SumSucc
+    | SumSucc | SumPlus
     -- premise
     | Pr (Maybe [(ClassicalSequentOver HOArithSumLex (Sequent (Form Bool)))])
     -- subproof assumption
@@ -53,6 +53,8 @@ data HOArithSumFL
     deriving Eq
 
 instance Show HOArithSumFL where
+    show (FO LL1)  = "EQ"; show (FO LL2)  = "EQ"
+    show (FO ALL1) = "EQ"; show (FO ALL2) = "EQ"
     show (FO x)    = show x
     show (Pr _)    = "PR"
     show DefU1     = "Def-U";  show DefU2     = "Def-U"
@@ -67,10 +69,10 @@ instance Show HOArithSumFL where
     show DefSub1   = "Def-S";  show DefSub2   = "Def-S"
     show DefSep1   = "Def-{}"; show DefSep2   = "Def-{}"
     show DefSep3   = "Def-{}"; show DefSep4   = "Def-{}"
-    show Induction = "Ind"
+    show Induction = "Ind"; show InductionPlus = "Ind"
     show PolyEq    = "Poly"
     show SumZero   = "ΣZ"
-    show SumSucc   = "ΣS"
+    show SumSucc   = "ΣS"; show SumPlus = "ΣS"
     show As        = "AS"
 
 ------------------------------------------------------------
@@ -86,6 +88,15 @@ inductionRule :: SequentRule HOArithSumLex (Form Bool)
 inductionRule =
     [ GammaV 1 :|-: SS (phi 1 arithZero)
     , GammaV 2 :+: SA (phi 1 (taun 1)) :|-: SS (phi 1 (arithSucc (taun 1)))
+    , SA (phi 1 (taun 1)) :|-: SS (phi 1 (taun 1))
+    ] ∴ GammaV 1 :+: GammaV 2 :|-: SS (lall "v" (phi 1))
+
+-- The same rule with the successor step spelled "t + 1" instead of "t'",
+-- so that proofs can avoid successor notation entirely.
+inductionPlusRule :: SequentRule HOArithSumLex (Form Bool)
+inductionPlusRule =
+    [ GammaV 1 :|-: SS (phi 1 arithZero)
+    , GammaV 2 :+: SA (phi 1 (taun 1)) :|-: SS (phi 1 (taun 1 `arithPlus` arithOne))
     , SA (phi 1 (taun 1)) :|-: SS (phi 1 (taun 1))
     ] ∴ GammaV 1 :+: GammaV 2 :|-: SS (lall "v" (phi 1))
 
@@ -106,6 +117,18 @@ sumSuccRule = [] ∴ Top :|-: SS
       `equals`
       (iteratedSum "i" tau theta `arithPlus` theta (arithSucc tau))
     )
+
+-- Σi=0..τ+1. θ(i) = (Σi=0..τ. θ(i)) + θ(τ+1)
+sumPlusRule :: SequentRule HOArithSumLex (Form Bool)
+sumPlusRule = [] ∴ Top :|-: SS
+    ( iteratedSum "i" (tau `arithPlus` arithOne) theta
+      `equals`
+      (iteratedSum "i" tau theta `arithPlus` theta (tau `arithPlus` arithOne))
+    )
+
+-- The numeral 1, used by the successor-free rule variants.
+arithOne :: ClassicalSequentOver HOArithSumLex (Term Int)
+arithOne = arithSucc arithZero
 
 ------------------------------------------------------------
 -- Inference instance
@@ -139,9 +162,11 @@ instance Inference HOArithSumFL HOArithSumLex (Form Bool) where
     ruleOf DefSep3   = unpackSeparation !! 2
     ruleOf DefSep4   = unpackSeparation !! 3
     ruleOf Induction = inductionRule
+    ruleOf InductionPlus = inductionPlusRule
     ruleOf PolyEq    = polyEqRule
     ruleOf SumZero   = sumZeroRule
     ruleOf SumSucc   = sumSuccRule
+    ruleOf SumPlus   = sumPlusRule
     ruleOf (FO UI  ) = universalInstantiation
     ruleOf (FO EG  ) = existentialGeneralization
     ruleOf (FO UD  ) = universalGeneralization
@@ -166,7 +191,8 @@ instance Inference HOArithSumFL HOArithSumLex (Form Bool) where
     conclusionOf (FO (SL x)) = liftSequent (conclusionOf x)
     conclusionOf r = lowerSequent (ruleOf r)
 
-    indirectInference Induction = Just assumptiveProof
+    indirectInference Induction     = Just assumptiveProof
+    indirectInference InductionPlus = Just assumptiveProof
     indirectInference (FO x)    = indirectInference x
     indirectInference _         = Nothing
 
@@ -179,11 +205,15 @@ instance Inference HOArithSumFL HOArithSumLex (Form Bool) where
         where stau = liftToSequent tau
     restriction Induction   = Just (eigenConstraint stau (SS (lall "v" $ phi' 1)) (fogamma 1 :+: fogamma 2))
         where stau = liftToSequent tau
+    restriction InductionPlus = Just (eigenConstraint stau (SS (lall "v" $ phi' 1)) (fogamma 1 :+: fogamma 2))
+        where stau = liftToSequent tau
     restriction PolyEq      = Just polyEqConstraint
     restriction _           = Nothing
 
     -- Fitch-style scope: induction's second premise is a subproof.
     globalRestriction (Left ded) n Induction =
+        Just (notAssumedConstraint n ded (taun 1 :: ClassicalSequentOver HOArithSumLex (Term Int)))
+    globalRestriction (Left ded) n InductionPlus =
         Just (notAssumedConstraint n ded (taun 1 :: ClassicalSequentOver HOArithSumLex (Term Int)))
     globalRestriction _ _ _ = Nothing
 
@@ -213,20 +243,26 @@ parseHOArithSumFL :: RuntimeDeductionConfig HOArithSumLex (Form Bool)
                   -> Parsec String u [HOArithSumFL]
 parseHOArithSumFL rtc = try parseExtra <|> liftFO
   where
-    liftFO = map FO <$> parseFOLogic defaultRuntimeDeductionConfig
+    -- Leibniz's law is renamed "EQ" in this system (parsed in parseExtra);
+    -- reject the first-order fragment's "LL" spelling with a pointer.
+    liftFO = do rs <- parseFOLogic defaultRuntimeDeductionConfig
+                if any (`elem` [LL1, LL2, ALL1, ALL2]) rs
+                    then unexpected "rule LL (it is named EQ in this system)"
+                    else return (map FO rs)
     parseExtra = do
         r <- choice (map (try . string)
-                ["PR", "AS", "Ind", "Poly", "ΣZ", "SumZ", "ΣS", "SumS"
+                ["PR", "AS", "Ind", "Poly", "ΣZ", "SumZ", "ΣS", "SumS", "EQ"
                 , "Def-U", "Def-I", "Def-C", "Def-P", "Def-S", "Def-=", "Def-\8709", "Def-{}"])
         return $ case r of
             "PR"        -> [Pr (problemPremises rtc)]
             "AS"        -> [As]
-            "Ind"       -> [Induction]
+            "Ind"       -> [Induction, InductionPlus]
             "Poly"      -> [PolyEq]
+            "EQ"        -> map FO [LL1, LL2, ALL1, ALL2]
             "ΣZ"        -> [SumZero]
             "SumZ"      -> [SumZero]
-            "ΣS"        -> [SumSucc]
-            "SumS"      -> [SumSucc]
+            "ΣS"        -> [SumSucc, SumPlus]
+            "SumS"      -> [SumSucc, SumPlus]
             "Def-U"     -> [DefU1, DefU2]
             "Def-I"     -> [DefI1, DefI2]
             "Def-C"     -> [DefC1, DefC2, DefC3, DefC4]

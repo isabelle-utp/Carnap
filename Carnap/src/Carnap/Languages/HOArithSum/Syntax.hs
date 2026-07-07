@@ -13,6 +13,7 @@ import Carnap.Languages.SetTheory.Syntax
 import Carnap.Languages.Arithmetic.Syntax
 import Carnap.Languages.ClassicalSequent.Syntax
 import Control.Lens ((^?), preview)
+import Data.Char (isDigit)
 
 type HOArithSumLex = ExtendedSeparativeSetTheoryLexOpen
         ( Predicate ArithLessThan :|: Function ArithOps :|: BoundedSum Int )
@@ -39,6 +40,10 @@ instance (Sequentable lex, PrismElementaryArithmeticLex lex b)
 -- recognises a bounded sum and prints its body with the bound variable
 -- substituted in, e.g. "Σy=0..x. y", the way it was written.  Separation and
 -- quantifier bodies are handled exactly as in the generic instance.
+--
+-- It also prints concrete numbers as numerals: since printing is bottom-up
+-- over strings and zero prints as "0", a successor whose argument printed as
+-- a numeral prints as the next numeral, so 0''' renders as "3".
 instance {-# OVERLAPPING #-} CopulaSchema HOArithSumLang where
     appSchema t@(x :!$: _) (LLam f) e =
         case ( castTo x        :: Maybe (HOArithSumLang (Term Int -> (Term Int -> Term Int) -> Term Int))
@@ -55,6 +60,12 @@ instance {-# OVERLAPPING #-} CopulaSchema HOArithSumLang where
             (Just x, _, Just (LLam f')) -> schematize (All x) (show (f' $ foVar x) : e)
             (_, Just x, Just (LLam f')) -> schematize (Some x) (show (f' $ foVar x) : e)
             _ -> schematize h (show (LLam f) : e)
+    appSchema x@(Fx _) y@(Fx _) e
+        | Just s <- castTo x :: Maybe (HOArithSumLang (Term Int -> Term Int))
+        , Just () <- s ^? _arithSucc
+        , let shown = show y
+        , all isDigit shown
+        = show (read shown + 1 :: Integer)
     appSchema x y e = schematize x (show y : e)
 
     lamSchema = defaultLamSchema
@@ -62,7 +73,8 @@ instance {-# OVERLAPPING #-} CopulaSchema HOArithSumLang where
 -- The same treatment for the sequent-calculus lexicon: lemma statements and
 -- proof goals are printed through the 'ClassicalSequentOver' language, whose
 -- default instance (the overlappable first-order one) likewise renders bounded
--- sums and separators as raw lambdas.
+-- sums and separators as raw lambdas.  Concrete numbers are again rendered as
+-- numerals.
 instance {-# OVERLAPPING #-} CopulaSchema (ClassicalSequentOver HOArithSumLex) where
     appSchema t@(x :!$: _) (LLam f) e =
         case ( castTo x        :: Maybe (ClassicalSequentOver HOArithSumLex (Term Int -> (Term Int -> Term Int) -> Term Int))
@@ -80,6 +92,12 @@ instance {-# OVERLAPPING #-} CopulaSchema (ClassicalSequentOver HOArithSumLex) w
             (Just (x,v), _) -> schematize (All x)  (show (f v) : e)
             (_, Just (x,v)) -> schematize (Some x) (show (f v) : e)
             _ -> schematize q (show (LLam f) : e)
+    appSchema x@(Fx _) y@(Fx _) e
+        | Just s <- castTo x :: Maybe (ClassicalSequentOver HOArithSumLex (Term Int -> Term Int))
+        , Just () <- s ^? _arithSucc
+        , let shown = show y
+        , all isDigit shown
+        = show (read shown + 1 :: Integer)
     appSchema x y e = schematize x (show y : e)
 
     lamSchema = defaultLamSchema
