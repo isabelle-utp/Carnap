@@ -170,30 +170,39 @@ createNumerical w i o opts = case (M.lookup "goal" opts >>= getGoal, M.lookup "p
     (Just g, Just p) -> do
         setInnerHTML i (Just p)
         bw <- createButtonWrapper w o
-        Just input <- createElement w (Just "input")
+        Just numInput <- createElement w (Just "input")
         Just wrap <- getParentElement i
-        appendChild o (Just input)
+        appendChild o (Just numInput)
         case M.lookup "content" opts of
-            Just t -> I.setValue (castToHTMLInputElement input) (Just t)
+            Just t -> I.setValue (castToHTMLInputElement numInput) (Just t)
             _ -> return ()
+        storageKey <- qualitativeStorageKey opts p
+        msaved <- localStorageGetItem storageKey
+        case msaved of
+            Just saved | not (Prelude.null saved) -> I.setValue (castToHTMLInputElement numInput) (Just saved)
+            _ -> return ()
+        savelistener <- newListener $ liftIO $ do
+            mv <- I.getValue (castToHTMLInputElement numInput)
+            case mv of Just v -> localStorageSetItem storageKey v; _ -> return ()
+        addListener numInput input savelistener False
         if "check" `inOpts` opts then do
               bt2 <- questionButton w "Check"
               appendChild bw (Just bt2)
-              checkIt <- newListener $ liftIO $ do 
-                              Just ival <- I.getValue . castToHTMLInputElement $ input
+              checkIt <- newListener $ liftIO $ do
+                              Just ival <- I.getValue . castToHTMLInputElement $ numInput
                               case readNumeric ival of
                                   Nothing -> message "Couldn't read the input. Try again?" >> setFailure w wrap
                                   Just v | v == g -> message "Correct!" >> setSuccess w wrap
                                   _ -> message "Not quite right. Try again?" >> setFailure w wrap
-              addListener bt2 click checkIt False                
+              addListener bt2 click checkIt False
         else return ()
         case M.lookup "submission" opts of
             Just s | Prelude.take 7 s == "saveAs:" -> do
                 let l = Prelude.drop 7 s
                 bt1 <- doneButton w "Submit"
                 appendChild bw (Just bt1)
-                submit <- newListener $ submitNumerical w opts wrap input g p l
-                addListener bt1 click submit False                
+                submit <- newListener $ submitNumerical w opts wrap numInput g p l
+                addListener bt1 click submit False
             _ -> return ()
     _ -> print "numerical answer was missing an option"
 
@@ -210,6 +219,15 @@ createShortAnswer w i o opts = case M.lookup "goal" opts of
         case M.lookup "content" opts of
             Just t -> T.setValue (castToHTMLTextAreaElement text) (Just t)
             _ -> return ()
+        storageKey <- qualitativeStorageKey opts g
+        msaved <- localStorageGetItem storageKey
+        case msaved of
+            Just saved | not (Prelude.null saved) -> T.setValue (castToHTMLTextAreaElement text) (Just saved)
+            _ -> return ()
+        savelistener <- newListener $ liftIO $ do
+            mv <- T.getValue (castToHTMLTextAreaElement text)
+            case mv of Just v -> localStorageSetItem storageKey v; _ -> return ()
+        addListener text input savelistener False
         appendChild o (Just text)
         case M.lookup "submission" opts of
             Just s | Prelude.take 7 s == "saveAs:" -> do
@@ -220,6 +238,20 @@ createShortAnswer w i o opts = case M.lookup "goal" opts of
                 addListener bt1 click submit False                
             _ -> return ()
         return ()
+
+-- the same key-derivation chain as proof boxes: an explicit storage-key
+-- can't be clobbered by author-supplied attributes like submission="none",
+-- with the submission identifier and problem text as fallbacks for
+-- hand-written HTML that lacks one
+qualitativeStorageKey :: M.Map String String -> String -> IO String
+qualitativeStorageKey opts fallback = do
+        pageId <- getPageId
+        let exerciseId = case M.lookup "storage-key" opts of
+                             Just k -> k
+                             _ -> case M.lookup "submission" opts of
+                                      Just s | Prelude.take 7 s == "saveAs:" -> Prelude.drop 7 s
+                                      _ -> fallback
+        return ("carnap:" ++ pageId ++ ":qualitative:" ++ exerciseId)
 
 readNumeric s = readIt ('0': dropWhile (== ' ') s)
     where readIt s' = case readMaybe s' :: Maybe Double of

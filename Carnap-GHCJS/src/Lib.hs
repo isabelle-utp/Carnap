@@ -242,11 +242,14 @@ genInOutElts w input output ty target =
               return $ Just (i, o, M.insert "content" content opts )
 
 generateExerciseElts :: IsElement self => Document -> String -> self -> IO [Maybe IOGoal]
-generateExerciseElts w ty target = do els <- getListOfElementsByCarnapType target ty 
-                                      mapM initialize els
-        where initialize Nothing = return Nothing
-              initialize (Just el) = do
-                  opts <- getCarnapDataMap el
+generateExerciseElts w ty target = do els <- getListOfElementsByCarnapType target ty
+                                      mapM initialize (zip [0 :: Int ..] els)
+        where initialize (_, Nothing) = return Nothing
+              initialize (n, Just el) = do
+                  -- record the element's position on the page, so that
+                  -- exercises with no other identifying features can still be
+                  -- told apart (e.g. for localStorage keys)
+                  opts <- M.insert "ordinal" (show n) <$> getCarnapDataMap el
                   Just content <- case M.lookup "content-format" opts of
                                       Just "html" -> getInnerHTML el :: IO (Maybe String)
                                       Nothing -> getTextContent el :: IO (Maybe String)

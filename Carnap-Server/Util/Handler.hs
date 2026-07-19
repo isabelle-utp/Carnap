@@ -81,8 +81,7 @@ addDocScripts = do
 -- * Pandoc
 allFilters :: Block -> State Int Block
 allFilters b = do
-    let pre = ( makeQualitativeProblems
-              . makeSequent
+    let pre = ( makeSequent
               . makeSynCheckers
               . makeTranslate
               . makeTreeDeduction
@@ -91,7 +90,7 @@ allFilters b = do
               . makeAnchors
               . renderFormulas
               ) b
-    mid <- makeProofChecker pre
+    mid <- makeProofChecker pre >>= makeQualitativeProblems
     return $ (makeTreeDeduction . makeCounterModelers) mid
 
 retrievePandocVal :: MonadHandler m => Maybe MetaValue -> m (Maybe [Text])

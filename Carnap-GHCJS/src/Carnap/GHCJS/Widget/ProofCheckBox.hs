@@ -99,9 +99,13 @@ checkerWith options updaters iog@(IOGoal i o g content opts) w = do
                                 Just k -> k
                                 _ -> case M.lookup "submission" opts of
                                          Just s | take 7 s == "saveAs:" -> drop 7 s
-                                         _ -> case M.lookup "goal" opts of
-                                                  Just g' -> g'
-                                                  Nothing -> trim content
+                                         _ -> case (M.lookup "goal" opts, trim content) of
+                                                  (Just g', _) -> g'
+                                                  (_, c) | not (null c) -> c
+                                                  -- a bare box (e.g. an empty playground) has
+                                                  -- nothing distinguishing it, so fall back to
+                                                  -- its position on the page
+                                                  _ -> maybe "" ('@':) (M.lookup "ordinal" opts)
                storageKey = "carnap:" ++ pageId ++ ":proofchecker:" ++ exerciseId
            msaved <- localStorageGetItem storageKey
            case msaved of

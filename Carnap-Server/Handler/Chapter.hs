@@ -93,8 +93,10 @@ fileToHtml path m = do md <- markdownFromFile (path </> m)
 
 applyFilters= let walkNotes y = evalState (walkM makeSideNotes y) 0
                   walkProblems y = evalState (walkM problemFilters y) 0
-                  problemFilters b = makeSynCheckers <$> makeProofChecker
-                      ((makeTranslate . makeTruthTables . makeCounterModelers . makeQualitativeProblems) b)
+                  problemFilters b = do
+                      mid <- makeQualitativeProblems
+                          ((makeTranslate . makeTruthTables . makeCounterModelers) b)
+                      makeSynCheckers <$> makeProofChecker mid
                   in walkNotes . walkProblems
 
 chapterLayout :: ToWidget App a => a -> Handler Html

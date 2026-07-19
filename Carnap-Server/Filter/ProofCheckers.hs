@@ -274,6 +274,10 @@ toPlayground n cls extra content
     | otherwise = playTemplate []
     where fixed = [ ("type","proofchecker")
                   , ("submission", T.concat ["saveAs:playground-", T.pack (show n)])
+                  -- the storage-key can't be clobbered by an author-supplied
+                  -- submission attribute (e.g. submission="none"), unlike the
+                  -- saveAs identifier above
+                  , ("storage-key", T.concat ["playground-", T.pack (show n)])
                   ]
           playTemplate opts = template (unions [fromList extra, fromList opts, fromList fixed]) "Playground" (unlines' $ formatChunk content)
 
