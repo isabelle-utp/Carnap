@@ -62,24 +62,17 @@ sumParser parseFreeV parseTerm =
 
 hoArithSumOptions :: FirstOrderParserOptions HOArithSumLex u Identity
 hoArithSumOptions = FirstOrderParserOptions
-    { atomicSentenceParser = \x -> try (elementParser x)
-                                   <|> try (equalsParser x)
+    { atomicSentenceParser = \x -> try (equalsParser x)
                                    <|> try (lessThanParser x)
                                    <|> try (inequalityParser x)
-                                   <|> subsetParser x
                                    <|> parsePredicateString extendedSymbols x
     , quantifiedSentenceParser' = quantifiedSentenceParser
     , freeVarParser = parseFreeVar "stuvwxyz"
     , constantParser = Just (parseConstant "abcdefghijklmnopqr"
-                              <|> try parseEmptySet
-                              <|> try (separationParser vparser tparser
-                                          (parserFromOptions hoArithSumOptions))
                               <|> sumParser vparser tparser)
     , functionParser = Just (\x -> hoArithSumOpParser
                                        (parenParser x
-                                        <|> powersetParser x
                                         <|> try parseNumeral
-                                        <|> try parseEmptySet
                                         <|> try (parseFunctionString extendedSymbols x)
                                         <|> vparser
                                         <|> cparser
@@ -110,6 +103,4 @@ hoArithSumOpParser :: Monad m
 hoArithSumOpParser subTerm = buildExpressionParser opTable subTerm
     where opTable = [ [Postfix (try (iteratedParse parseSucc))]
                     , [Infix (try parsePlus) AssocLeft, Infix (try parseTimes) AssocLeft]
-                    , [Infix (try parseIntersect) AssocLeft, Infix (try parseUnion) AssocLeft]
-                    , [Infix (try parseComplement) AssocNone]
                     ]
