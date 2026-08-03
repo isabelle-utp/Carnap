@@ -40,6 +40,7 @@ data HOArithSumFL
     | UI | UE | EI | EE1 | EE2
     -- identity rules
     | IDI | IDE1 | IDE2
+    | EqChain Int
     -- quantifier negation
     | QN1 | QN2 | QN3 | QN4
     -- arithmetic / sum rules
@@ -59,6 +60,7 @@ instance Show HOArithSumFL where
     show EE1       = "∃E"; show EE2 = "∃E"
     show IDI       = "=I"
     show IDE1      = "=E"; show IDE2 = "=E"
+    show (EqChain _) = "Chain"
     show QN1       = "CQ"; show QN2 = "CQ"
     show QN3       = "CQ"; show QN4 = "CQ"
     show Induction = "Ind"; show InductionPlus = "Ind"
@@ -122,6 +124,33 @@ sumPlusRule = [] ∴ Top :|-: SS
 arithOne :: ClassicalSequentOver HOArithSumLex (Term Int)
 arithOne = arithSucc arithZero
 
+-- Transitivity for a chain of equations, cited as a list of lines rather
+-- than a subproof.  Each cited line must be an equality τi = τ(i+1), and
+-- together they must form a chain
+--
+--      τ1 = τ2          (each link individually justified)
+--      τ2 = τ3
+--      …
+--      τn = τ(n+1)
+--      τ1 = τ(n+1)      :Chain n,n-1,…,1
+--
+-- so that citing the n lines of the chain justifies the equality between
+-- the chain's first and last terms.  The links may be cited in any order,
+-- since the checker permutes the rule's premises when matching.  The
+-- conclusion's LHS and RHS are pinned to the first and last terms of the
+-- chain by unification, so any equation the user writes is accepted only
+-- if it is exactly τ1 = τ(n+1).
+eqChainRule :: Int -> SequentRule HOArithSumLex (Form Bool)
+eqChainRule n =
+    [ GammaV i :|-: SS (t i `equals` t (i + 1)) | i <- [1 .. n] ]
+    ∴ foldl1 (:+:) [ GammaV i | i <- [1 .. n] ] :|-: SS (t 1 `equals` t (n + 1))
+  where
+    t :: Int -> ClassicalSequentOver HOArithSumLex (Term Int)
+    t = taun
+
+maxEqChainLength :: Int
+maxEqChainLength = 8
+
 ------------------------------------------------------------
 -- Inference instance
 ------------------------------------------------------------
@@ -137,6 +166,7 @@ instance Inference HOArithSumFL HOArithSumLex (Form Bool) where
     ruleOf IDI       = eqReflexivity
     ruleOf IDE1      = leibnizLawVariations !! 0
     ruleOf IDE2      = leibnizLawVariations !! 1
+    ruleOf (EqChain n) = eqChainRule n
     ruleOf QN1       = quantifierNegation !! 0
     ruleOf QN2       = quantifierNegation !! 1
     ruleOf QN3       = quantifierNegation !! 2
@@ -240,10 +270,11 @@ parseHOArithSumFL rtc =
     -- reject that spelling with a pointer to the current name.
     eqReject = string "EQ" >> unexpected "rule EQ (it is named =E in this system)"
     parseArith = do
-        r <- choice (map (try . string) ["Ind", "Poly", "ΣZ", "SumZ", "ΣS", "SumS"])
+        r <- choice (map (try . string) ["Ind", "Poly", "ΣZ", "SumZ", "ΣS", "SumS", "Chain"])
         return $ case r of
-            "Ind"  -> [Induction, InductionPlus]
-            "Poly" -> [PolyEq]
+            "Ind"   -> [Induction, InductionPlus]
+            "Poly"  -> [PolyEq]
+            "Chain" -> map EqChain [1 .. maxEqChainLength]
             r | r `elem` ["ΣZ", "SumZ"] -> [SumZero]
               | otherwise               -> [SumSucc, SumPlus]
     quantRule = do

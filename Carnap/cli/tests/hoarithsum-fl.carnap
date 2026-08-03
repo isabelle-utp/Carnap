@@ -75,6 +75,39 @@ begin
 end
 
 --------------------------------------------------------------------------------
+-- Equation chaining
+--------------------------------------------------------------------------------
+
+-- A chain cites a list of equality lines directly (no subproof): each
+-- cited line is one individually-justified link τi = τ(i+1), and the rule
+-- concludes the equality between the chain's first and last terms.
+
+-- Plain transitivity: a two-link chain over the premises.
+lemma ChainTwo: x = y, y = z |- x = z
+begin
+x=y :PR
+y=z :PR
+x=z :Chain 1,2
+end
+
+-- A three-link chain; the middle terms must match up exactly.
+lemma ChainThree: t = s, s = u, u = v |- t = v
+begin
+t=s :PR
+s=u :PR
+u=v :PR
+t=v :Chain 1,2,3
+end
+
+-- Chaining calculation steps produced by Poly.
+lemma ChainCalc: |- (2 + 3) * 2 = 10
+begin
+(2+3)*2 = 5*2 :Poly
+5*2 = 10 :Poly
+(2+3)*2 = 10 :Chain 1,2
+end
+
+--------------------------------------------------------------------------------
 -- Induction
 --------------------------------------------------------------------------------
 
