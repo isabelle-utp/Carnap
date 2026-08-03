@@ -108,6 +108,70 @@ begin
 end
 
 --------------------------------------------------------------------------------
+-- Ellipsis notation
+--------------------------------------------------------------------------------
+
+-- "..." abbreviates the RHS of the previous line's equality, so a chain of
+-- calculation steps can be laid out without repeating the middle terms.
+lemma EllipsisChain: x = y, y = z, z = v |- x = v
+begin
+x=y :PR
+... = z :PR
+... = v :PR
+x=v :Chain 1,2,3
+end
+
+-- The same layout over Poly steps.
+lemma EllipsisCalc: |- (2 + 3) * 2 = 10
+begin
+(2+3)*2 = 5*2 :Poly
+... = 10 :Poly
+(2+3)*2 = 10 :Chain 1,2
+end
+
+-- The ellipsis is a term, so it can sit inside a larger term.
+lemma EllipsisInTerm: |- 5 + 1 = 6
+begin
+2 + 3 = 5 :Poly
+... + 1 = 6 :Poly
+end
+
+--------------------------------------------------------------------------------
+-- Congruence
+--------------------------------------------------------------------------------
+
+-- EQR lets an equality be applied inside an arbitrary term context: from
+-- τ = σ it concludes θ(τ) = θ(σ) for any term θ with a hole.
+
+-- A function symbol as the context.
+lemma CongFun: x = y |- f(x) = f(y)
+begin
+x=y :PR
+f(x)=f(y) :EQR 1
+end
+
+-- An arithmetic context.
+lemma CongPlus: x = y |- x + 1 = y + 1
+begin
+x=y :PR
+x+1=y+1 :EQR 1
+end
+
+-- The hole may occur more than once.
+lemma CongSquare: x = y |- x * x = y * y
+begin
+x=y :PR
+x*x=y*y :EQR 1
+end
+
+-- A nested context.
+lemma CongNested: x = y |- f(g(x) + 2) = f(g(y) + 2)
+begin
+x=y :PR
+f(g(x)+2)=f(g(y)+2) :EQR 1
+end
+
+--------------------------------------------------------------------------------
 -- Induction
 --------------------------------------------------------------------------------
 

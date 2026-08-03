@@ -6,6 +6,8 @@ module Carnap.Languages.HOArithSum.Logic.FosterLaursen
     ) where
 
 import Text.Parsec
+import Text.Parsec.Error (newErrorMessage, Message(Message))
+import Text.Parsec.Pos (newPos)
 import Carnap.Core.Data.Types
 import Carnap.Core.Unification.Unification (applySub)
 import Carnap.Languages.HOArithSum.Syntax
@@ -22,9 +24,9 @@ import Carnap.Calculi.NaturalDeduction.Syntax
 import Carnap.Calculi.NaturalDeduction.Parser
 import Carnap.Calculi.NaturalDeduction.Checker (hoProcessLineFitch, hoProcessLineFitchMemo)
 import Carnap.Languages.Util.LanguageClasses
-import Carnap.Core.Data.Optics (binaryOpPrism)
+import Carnap.Core.Data.Optics (binaryOpPrism, genChildren)
 import qualified Control.Lens
-import Control.Lens (preview)
+import Control.Lens (preview, over, toListOf, transform, cosmos)
 
 ------------------------------------------------------------
 -- Rule type
@@ -41,6 +43,7 @@ data HOArithSumFL
     -- identity rules
     | IDI | IDE1 | IDE2
     | EqChain Int
+    | EqCong
     -- quantifier negation
     | QN1 | QN2 | QN3 | QN4
     -- arithmetic / sum rules
@@ -61,6 +64,7 @@ instance Show HOArithSumFL where
     show IDI       = "=I"
     show IDE1      = "=E"; show IDE2 = "=E"
     show (EqChain _) = "Chain"
+    show EqCong    = "EQR"
     show QN1       = "CQ"; show QN2 = "CQ"
     show QN3       = "CQ"; show QN4 = "CQ"
     show Induction = "Ind"; show InductionPlus = "Ind"
@@ -151,6 +155,20 @@ eqChainRule n =
 maxEqChainLength :: Int
 maxEqChainLength = 8
 
+-- Congruence for equality: equals may be applied inside any term context.
+--
+--      τ = σ
+--      ───────────────
+--      θ(τ) = θ(σ)
+--
+-- θ is a schematic unary function, so it is solved for by higher-order
+-- matching against the conclusion: it stands for an arbitrary term with a
+-- hole, and so covers f(τ) = f(σ), τ + 1 = σ + 1, τ * τ = σ * σ, and so on.
+eqCongruenceRule :: SequentRule HOArithSumLex (Form Bool)
+eqCongruenceRule =
+    [ GammaV 1 :|-: SS (tau `equals` tau') ]
+    ∴ GammaV 1 :|-: SS (theta tau `equals` theta tau')
+
 ------------------------------------------------------------
 -- Inference instance
 ------------------------------------------------------------
@@ -167,6 +185,7 @@ instance Inference HOArithSumFL HOArithSumLex (Form Bool) where
     ruleOf IDE1      = leibnizLawVariations !! 0
     ruleOf IDE2      = leibnizLawVariations !! 1
     ruleOf (EqChain n) = eqChainRule n
+    ruleOf EqCong    = eqCongruenceRule
     ruleOf QN1       = quantifierNegation !! 0
     ruleOf QN2       = quantifierNegation !! 1
     ruleOf QN3       = quantifierNegation !! 2
@@ -270,11 +289,12 @@ parseHOArithSumFL rtc =
     -- reject that spelling with a pointer to the current name.
     eqReject = string "EQ" >> unexpected "rule EQ (it is named =E in this system)"
     parseArith = do
-        r <- choice (map (try . string) ["Ind", "Poly", "ΣZ", "SumZ", "ΣS", "SumS", "Chain"])
+        r <- choice (map (try . string) ["Ind", "Poly", "ΣZ", "SumZ", "ΣS", "SumS", "Chain", "EQR"])
         return $ case r of
             "Ind"   -> [Induction, InductionPlus]
             "Poly"  -> [PolyEq]
             "Chain" -> map EqChain [1 .. maxEqChainLength]
+            "EQR"   -> [EqCong]
             r | r `elem` ["ΣZ", "SumZ"] -> [SumZero]
               | otherwise               -> [SumSucc, SumPlus]
     quantRule = do
@@ -290,11 +310,68 @@ parseHOArithSumFL rtc =
               | r == "=E" -> [IDE1, IDE2]
               | otherwise -> [QN1, QN2, QN3, QN4]
 
+------------------------------------------------------------
+-- Ellipsis resolution
+------------------------------------------------------------
+
+-- | Proof lines may write "..." for the right-hand side of the previous
+-- line's equality, so that a calculation can be laid out as
+--
+--      x = y     :…
+--      ... = z   :…
+--      ... = v   :…
+--      x = v     :Chain 1,2,3
+--
+-- which stands for the lines @y = z@ and @z = v@.  The parser turns "..."
+-- into the placeholder term 'ellipsisTerm'; here we walk the deduction in
+-- order and replace it, in every position it occurs, with the right-hand
+-- side of the preceding line (itself already resolved).
+resolveEllipses :: [DeductionLine HOArithSumFL HOArithSumLex (Form Bool)]
+                -> [DeductionLine HOArithSumFL HOArithSumLex (Form Bool)]
+resolveEllipses = go Nothing
+  where
+    -- the carried value is the RHS of the previous line's equality, if the
+    -- previous line was an assertion of an equality
+    go _ [] = []
+    go prev (l@(AssertLine phi r d deps) : ls)
+        | not (hasEllipsis phi) = l : go (rhsOf phi) ls
+        | otherwise = case prev of
+            Just t  -> let phi' = substEllipsis t phi
+                       in AssertLine phi' r d deps : go (rhsOf phi') ls
+            Nothing -> ellipsisError d phi : go Nothing ls
+    go prev (l:ls) = l : go prev ls
+
+    ellipsisError d phi = PartialLine (Right phi) msg d
+        where msg = newErrorMessage
+                        (Message "\"...\" requires that the previous line be an equality")
+                        (newPos "" 1 1)
+
+-- All maximal term-subterms of a formula, and their subterms.
+subterms :: HOArithSumLang (Form Bool) -> [HOArithSumLang (Term Int)]
+subterms = toListOf (termChildren . cosmos)
+
+hasEllipsis :: HOArithSumLang (Form Bool) -> Bool
+hasEllipsis = any isEllipsisTerm . subterms
+
+substEllipsis :: HOArithSumLang (Term Int)
+              -> HOArithSumLang (Form Bool)
+              -> HOArithSumLang (Form Bool)
+substEllipsis t = over termChildren (transform (\x -> if isEllipsisTerm x then t else x))
+
+-- The right-hand side of a formula, when it is an equality.
+rhsOf :: HOArithSumLang (Form Bool) -> Maybe (HOArithSumLang (Term Int))
+rhsOf phi = snd <$> preview (binaryOpPrism eqPrism) phi
+    where eqPrism :: Control.Lens.Prism' (HOArithSumLang (Term Int -> Term Int -> Form Bool)) ()
+          eqPrism = _termEq
+
+termChildren :: Control.Lens.Traversal' (HOArithSumLang (Form Bool)) (HOArithSumLang (Term Int))
+termChildren = genChildren
+
 parseHOArithSumFLProof :: RuntimeDeductionConfig HOArithSumLex (Form Bool)
                        -> String
                        -> [DeductionLine HOArithSumFL HOArithSumLex (Form Bool)]
 parseHOArithSumFLProof rtc =
-    toDeductionFitch (parseHOArithSumFL rtc) hoArithSumParser
+    resolveEllipses . toDeductionFitch (parseHOArithSumFL rtc) hoArithSumEllipsisParser
 
 hoArithSumFLCalc :: NaturalDeductionCalc HOArithSumFL HOArithSumLex (Form Bool)
 hoArithSumFLCalc = mkNDCalc

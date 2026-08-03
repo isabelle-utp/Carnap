@@ -1,9 +1,12 @@
 {-#LANGUAGE TypeOperators, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
 module Carnap.Languages.HOArithSum.Parser
     ( hoArithSumParser, hoArithSumMontagueParser, hoArithSumOptions
+    , hoArithSumEllipsisParser, ellipsisTerm, isEllipsisTerm
     ) where
 
+import Control.Lens (review, Prism')
 import Carnap.Core.Data.Types
+import Carnap.Core.Data.Classes (UniformlyEq((=*)))
 import Carnap.Languages.HOArithSum.Syntax
 import Carnap.Languages.Util.LanguageClasses
 import Carnap.Languages.Util.GenericParsers
@@ -60,36 +63,67 @@ sumParser parseFreeV parseTerm =
            let bf x = subBoundVar v x body
            return $ iteratedSum (show v) n bf
 
+-- | The placeholder term written @...@ in a proof line, standing for the
+-- right-hand side of the previous line's equality.  It is a zero-ary string
+-- function, so it prints as "..." and is inaccessible to the ordinary
+-- function-symbol parser (function names must begin with a lower-case
+-- letter).  The ellipsis is resolved after parsing, by the calculus that
+-- supports it; see 'Carnap.Languages.HOArithSum.Logic.FosterLaursen'.
+ellipsisTerm :: HOArithSumLang (Term Int)
+ellipsisTerm = review sf ("...", AZero)
+    where sf :: Prism' (HOArithSumLang (Term Int)) (String, Arity (Term Int) (Term Int) (Term Int))
+          sf = _stringFunc
+
+isEllipsisTerm :: HOArithSumLang (Term Int) -> Bool
+isEllipsisTerm t = t =* ellipsisTerm
+
+parseEllipsis :: Monad m => ParsecT String u m (HOArithSumLang (Term Int))
+parseEllipsis = string "..." >> spaces >> return ellipsisTerm
+
+-- | The shared option set, parameterized by whether @...@ is a legal term.
+-- It is legal only in proof lines, not in lemma statements or goals.
+hoArithSumOptionsWith :: Bool -> FirstOrderParserOptions HOArithSumLex u Identity
+hoArithSumOptionsWith allowEllipsis = opts
+  where
+    opts = FirstOrderParserOptions
+        { atomicSentenceParser = \x -> try (equalsParser x)
+                                       <|> try (lessThanParser x)
+                                       <|> try (inequalityParser x)
+                                       <|> parsePredicateString extendedSymbols x
+        , quantifiedSentenceParser' = quantifiedSentenceParser
+        , freeVarParser = parseFreeVar "stuvwxyz"
+        , constantParser = Just (ellipsisParser
+                                  <|> parseConstant "abcdefghijklmnopqr"
+                                  <|> sumParser vparser tparser)
+        , functionParser = Just (\x -> hoArithSumOpParser
+                                           (parenParser x
+                                            <|> try parseNumeral
+                                            <|> try (parseFunctionString extendedSymbols x)
+                                            <|> vparser
+                                            <|> cparser
+                                            ))
+        , hasBooleanConstants = True
+        , parenRecur = parenOrBracket
+        , opTable = standardOpTable
+        , finalValidation = const (pure ())
+        }
+    ellipsisParser | allowEllipsis = try parseEllipsis
+                   | otherwise     = parserZero
+    cparser = case constantParser opts of Just c -> c
+    fparser = case functionParser opts of Just f -> f
+    vparser = freeVarParser opts
+    tparser = try (fparser tparser) <|> try cparser <|> vparser
+    parenOrBracket opt rw = (wrappedWith '(' ')' (rw opt) <|> wrappedWith '[' ']' (rw opt))
+
 hoArithSumOptions :: FirstOrderParserOptions HOArithSumLex u Identity
-hoArithSumOptions = FirstOrderParserOptions
-    { atomicSentenceParser = \x -> try (equalsParser x)
-                                   <|> try (lessThanParser x)
-                                   <|> try (inequalityParser x)
-                                   <|> parsePredicateString extendedSymbols x
-    , quantifiedSentenceParser' = quantifiedSentenceParser
-    , freeVarParser = parseFreeVar "stuvwxyz"
-    , constantParser = Just (parseConstant "abcdefghijklmnopqr"
-                              <|> sumParser vparser tparser)
-    , functionParser = Just (\x -> hoArithSumOpParser
-                                       (parenParser x
-                                        <|> try parseNumeral
-                                        <|> try (parseFunctionString extendedSymbols x)
-                                        <|> vparser
-                                        <|> cparser
-                                        ))
-    , hasBooleanConstants = True
-    , parenRecur = parenOrBracket
-    , opTable = standardOpTable
-    , finalValidation = const (pure ())
-    }
-    where cparser = case constantParser hoArithSumOptions of Just c -> c
-          fparser = case functionParser hoArithSumOptions of Just f -> f
-          vparser = freeVarParser hoArithSumOptions
-          tparser = try (fparser tparser) <|> try cparser <|> vparser
-          parenOrBracket opt rw = (wrappedWith '(' ')' (rw opt) <|> wrappedWith '[' ']' (rw opt))
+hoArithSumOptions = hoArithSumOptionsWith False
 
 hoArithSumParser :: Parsec String u (HOArithSumLang (Form Bool))
 hoArithSumParser = parserFromOptions hoArithSumOptions
+
+-- | As 'hoArithSumParser', but additionally accepting @...@ as a term.
+hoArithSumEllipsisParser :: Parsec String u (HOArithSumLang (Form Bool))
+hoArithSumEllipsisParser = parserFromOptions (hoArithSumOptionsWith True)
 
 hoArithSumMontagueParser :: Parsec String u (HOArithSumLang (Form Bool))
 hoArithSumMontagueParser = parserFromOptions hoArithSumOptions { hasBooleanConstants = False }
