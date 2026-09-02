@@ -45,6 +45,7 @@ import Carnap.Languages.PurePropositional.Logic.Davis
 import Carnap.Languages.PurePropositional.Logic.EbelsDuggan
 import Carnap.Languages.PurePropositional.Logic.Equivalence
 import Carnap.Languages.PurePropositional.Logic.FosterAndLaursen
+import Carnap.Languages.PurePropositional.Logic.FosterEquivalence
 import Carnap.Languages.PurePropositional.Logic.Gallow
 import Carnap.Languages.PurePropositional.Logic.Gamut
 import Carnap.Languages.PurePropositional.Logic.Gentzen
@@ -82,6 +83,7 @@ ofPropSys f sys | sys == "LogicBookSD"                   = Just $ f logicBookSDC
                 | sys == "fosterAndLaursenTFL"           = Just $ f fosterAndLaursenTFLCalc
                 | sys == "fosterAndLaursenTFL2019"       = Just $ f fosterAndLaursenTFL2019Calc
                 | sys == "fosterAndLaursenTFLCore"       = Just $ f fosterAndLaursenTFLCoreCalc
+                | sys == "fosterPropEq"                  = Just $ f fosterPropEqCalc
                 | sys == "gallowSL"                      = Just $ f gallowSLCalc
                 | sys == "gallowSLPlus"                  = Just $ f gallowSLPlusCalc
                 | sys == "gamutIPND"                     = Just $ f gamutIPNDCalc

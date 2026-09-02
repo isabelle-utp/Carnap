@@ -383,6 +383,7 @@ propSystems =
     , "davisSL"
     , "ebelsDugganTFL"
     , "fosterAndLaursenTFL", "fosterAndLaursenTFL2019", "fosterAndLaursenTFLCore"
+    , "fosterPropEq"
     , "gallowSL", "gallowSLPlus"
     , "gamutIPND", "gamutMPND", "gamutPND", "gamutPNDPlus"
     , "goldfarbPropND"
