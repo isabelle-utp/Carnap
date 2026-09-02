@@ -17,6 +17,7 @@ import Carnap.Languages.ModalPropositional.Logic (ofModalPropSys)
 import Carnap.Languages.PureSecondOrder.Logic (ofSecondOrderSys) 
 import Carnap.Languages.SetTheory.Logic (ofSetTheorySys)
 import Carnap.Languages.HigherOrderArithmetic.Logic (ofHigherOrderArithmeticSys)
+import Carnap.Languages.HOArithSum.Logic (ofHOArithSumSys)
 import Carnap.Languages.DefiniteDescription.Logic.Gamut (ofDefiniteDescSys)
 import Carnap.Languages.ModalFirstOrder.Logic (hardegreeMPLCalc)
 import Carnap.GHCJS.SharedTypes
@@ -113,6 +114,7 @@ activateChecker drs w (Just iog@(IOGoal i o g _ opts)) -- TODO: need to update n
                                      `mplus` ((\it -> tryParse it noRuntimeOptions) `ofSecondOrderSys` sys)
                                      `mplus` ((\ it -> tryParse it noRuntimeOptions) `ofSetTheorySys` sys)
                                      `mplus` ((\ it -> tryParse it noRuntimeOptions) `ofHigherOrderArithmeticSys` sys)
+                                     `mplus` ((\ it -> tryParse it noRuntimeOptions) `ofHOArithSumSys` sys)
                                      `mplus` ((\ it -> tryParse it noRuntimeOptions) `ofDefiniteDescSys` sys)
                                      `mplus` ((\it -> tryParse it noRuntimeOptions) `ofModalPropSys` sys)
         where sys = case M.lookup "system" opts of

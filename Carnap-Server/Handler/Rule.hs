@@ -63,6 +63,7 @@ getRuleR = do derivedPropRules <- getPropDrList
                                          data-carnap-system="prop"
                                          data-carnap-guides="montague"
                                          data-carnap-options="resize"
+                                         data-carnap-storage-key="ruleBuilder-prop"
                                          data-carnap-submission="saveRule">
 
                                 $maybe folRules <- derivedFOLRules
@@ -77,6 +78,7 @@ getRuleR = do derivedPropRules <- getPropDrList
                                          data-carnap-system="firstOrder"
                                          data-carnap-guides="montague"
                                          data-carnap-options="resize"
+                                         data-carnap-storage-key="ruleBuilder-firstOrder"
                                          data-carnap-submission="saveRule">
                             |]
 

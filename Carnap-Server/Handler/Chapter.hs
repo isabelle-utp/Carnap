@@ -10,7 +10,7 @@ import           System.Directory       (getDirectoryContents)
 import           Text.Hamlet            (hamletFile)
 import           Text.Julius            (juliusFile)
 import           Text.Pandoc
-import           Text.Pandoc.Walk       (walk, walkM)
+import           Text.Pandoc.Walk       (walkM)
 import           TH.RelativePaths       (pathRelativeToCabalPackage)
 import           Yesod.Markdown
 
@@ -92,7 +92,11 @@ fileToHtml path m = do md <- markdownFromFile (path </> m)
                     ]
 
 applyFilters= let walkNotes y = evalState (walkM makeSideNotes y) 0
-                  walkProblems y = walk (makeSynCheckers . makeProofChecker . makeTranslate . makeTruthTables . makeCounterModelers . makeQualitativeProblems) y
+                  walkProblems y = evalState (walkM problemFilters y) 0
+                  problemFilters b = do
+                      mid <- makeQualitativeProblems
+                          ((makeTranslate . makeTruthTables . makeCounterModelers) b)
+                      makeSynCheckers <$> makeProofChecker mid
                   in walkNotes . walkProblems
 
 chapterLayout :: ToWidget App a => a -> Handler Html

@@ -2,7 +2,7 @@
 --
 -- Demonstrates the new rules: PolyEq (ring-equality decision procedure),
 -- ΣZ / ΣS (recursion equations for the bounded sum), Ind (induction),
--- and the parse-time abbreviation `1 ≡ 0'`.
+-- and numerals as parse-time sugar for iterated successors (`3 ≡ 0'''`).
 
 logic hoArithSumFL
 
@@ -23,10 +23,34 @@ begin
 1 + 1 = 0'' :Poly
 end
 
+-- Numerals are sugar for iterated successors, so they mix freely with
+-- successor notation.
+lemma NumeralDesugar: |- 3 = 0'''
+begin
+3 = 0''' :Poly
+end
+
+lemma NumeralArith: |- (2 + 3) * 2 = 10
+begin
+(2 + 3) * 2 = 10 :Poly
+end
+
+-- Successor applies to numerals like any other term.
+lemma NumeralSucc: |- 4' = 5
+begin
+4' = 5 :Poly
+end
+
 -- Σ-terms appear as opaque indeterminates: doubling matches itself.
 lemma SumOpaque: |- (Σx=0..n. x) + (Σx=0..n. x) = (0' + 0') * (Σx=0..n. x)
 begin
 (Σx=0..n. x) + (Σx=0..n. x) = (0' + 0') * (Σx=0..n. x) :Poly
+end
+
+-- 'S', 'Sum', and 'sum' are ASCII shorthands for 'Σ', and denote the same term.
+lemma SumShorthand: |- (Sx=0..n. x) + (Sx=0..n. x) = 2 * (Σx=0..n. x)
+begin
+(Sx=0..n. x) + (Sx=0..n. x) = 2 * (Σx=0..n. x) :Poly
 end
 
 --------------------------------------------------------------------------------
@@ -41,4 +65,41 @@ end
 lemma SigmaSucc: |- Σx=0..0'. x = (Σx=0..0. x) + 0'
 begin
 Σx=0..0'. x = (Σx=0..0. x) + 0' :ΣS
+end
+
+-- The successor-free variant of ΣS: same rule name, with the upper bound
+-- stepped as "n + 1" rather than "n'".
+lemma SigmaPlusOne: |- Σx=0..n+1. x = (Σx=0..n. x) + (n + 1)
+begin
+Σx=0..n+1. x = (Σx=0..n. x) + (n + 1) :ΣS
+end
+
+--------------------------------------------------------------------------------
+-- Induction
+--------------------------------------------------------------------------------
+
+-- Induction with the successor step written "t'".  (The inductive step must
+-- actually use the assumption, so the subproof's conclusion depends on it.)
+lemma IndSucc: |- Ax(Σy=0..x. 0 = 0)
+begin
+Σy=0..0. 0 = 0 :ΣZ
+   Σy=0..t. 0 = 0 :AS
+   Σy=0..t'. 0 = (Σy=0..t. 0) + 0 :ΣS
+   Σy=0..t'. 0 = 0 + 0 :EQ 2, 3
+   0 + 0 = 0 :Poly
+   Σy=0..t'. 0 = 0 :EQ 5, 4
+Ax(Σy=0..x. 0 = 0) :Ind 1, 2-6
+end
+
+-- The successor-free variant: the inductive step concludes P(t + 1), and the
+-- Σ-unfolding steps through "t + 1", so no successor symbol appears.
+lemma IndPlusOne: |- Ax(Σy=0..x. 0 = 0)
+begin
+Σy=0..0. 0 = 0 :ΣZ
+   Σy=0..t. 0 = 0 :AS
+   Σy=0..t+1. 0 = (Σy=0..t. 0) + 0 :ΣS
+   Σy=0..t+1. 0 = 0 + 0 :EQ 2, 3
+   0 + 0 = 0 :Poly
+   Σy=0..t+1. 0 = 0 :EQ 5, 4
+Ax(Σy=0..x. 0 = 0) :Ind 1, 2-6
 end

@@ -4,18 +4,33 @@ import Text.Pandoc
 import Data.Map (Map, unions, fromList, toList)
 import qualified Data.Text as T
 import Data.Text (Text)
+import Control.Monad.State (State, get, put)
 import Filter.Util (numof, intoChunks, formatChunk, unlines', exerciseWrapper)
 import Prelude
 
-makeProofChecker :: Block -> Block
+-- The Int state is a per-document counter used to give each proof box (both
+-- exercises and Playgrounds) a unique storage key. Without this, proof boxes
+-- that share a goal/problem-number collide in localStorage.
+makeProofChecker :: Block -> State Int Block
 makeProofChecker cb@(CodeBlock (_,classes,extra) contents)
-    | "ProofChecker" `elem` classes = Div ("",[],[]) $ map (activate classes extra) $ intoChunks contents
-    | "Playground" `elem` classes = Div ("",[],[]) [toPlayground classes extra contents]
-    | otherwise = cb
-makeProofChecker x = x
+    | "ProofChecker" `elem` classes = do chunks <- mapM (activate classes extra) (intoChunks contents)
+                                         return $ Div ("",[],[]) chunks
+    | "Playground" `elem` classes = do n <- get
+                                       put (n + 1)
+                                       return $ Div ("",[],[]) [toPlayground n classes extra contents]
+    | otherwise = return cb
+makeProofChecker x = return x
 
-activate :: [Text] -> [(Text, Text)] -> Text -> Block
-activate cls extra chunk
+activate :: [Text] -> [(Text, Text)] -> Text -> State Int Block
+activate cls extra chunk = do n <- get
+                              put (n + 1)
+                              return (activate' n cls extra chunk)
+
+-- The submission identifier stays the bare problem number ('numof h'), since
+-- that's how submissions are keyed in the gradebook; the per-document counter
+-- 'n' is only mixed into the separate storage-key so localStorage stays unique.
+activate' :: Int -> [Text] -> [(Text, Text)] -> Text -> Block
+activate' n cls extra chunk
     | "AllenSL"          `elem` cls = exTemplate [("system", "allenSL")]
     | "AllenSLPlus"      `elem` cls = exTemplate [("system", "allenSLPlus")]
     | "ArthurSL"         `elem` cls = exTemplate [("system", "arthurSL"), ("guides", "indent"), ("options", "fonts resize")]
@@ -112,6 +127,7 @@ activate cls extra chunk
     | "SecondOrder"      `elem` cls = exTemplate [("system", "secondOrder")]
     | "SeparativeST"     `elem` cls = exTemplate [("system", "separativeSetTheory"),("options","resize render")]
     | "OpenLogicExHOArith" `elem` cls = exTemplate [("system", "openLogicExHOArith"),("options","resize render")]
+    | "HOArithSumFL"     `elem` cls = exTemplate [("system", "hoArithSumFL"),("options","resize render")]
     | "TomassiPL"        `elem` cls = exTemplate [("system", "tomassiPL"), ("options","resize render hideNumbering")]
     | "TomassiQL"        `elem` cls = exTemplate [("system", "tomassiQL"), ("options","resize render hideNumbering")]
     | "WinklerFOL"       `elem` cls = exTemplate [("system", "winklerFOL"), ("guides", "fitch"), ("options", "resize")]
@@ -132,11 +148,15 @@ activate cls extra chunk
     | otherwise = exTemplate []
     where seqof = T.dropWhile (/= ' ')
           (h:t) = formatChunk chunk
-          fixed = [("type","proofchecker"),("goal",seqof h),("submission", T.concat ["saveAs:", numof h])]
+          fixed = [ ("type","proofchecker")
+                  , ("goal",seqof h)
+                  , ("submission", T.concat ["saveAs:", numof h])
+                  , ("storage-key", T.concat [numof h, "-", T.pack (show n)])
+                  ]
           exTemplate opts = template (unions [fromList extra, fromList opts, fromList fixed]) (numof h) (unlines' t)
 
-toPlayground :: [Text] -> [(Text, Text)] -> Text -> Block
-toPlayground cls extra content
+toPlayground :: Int -> [Text] -> [(Text, Text)] -> Text -> Block
+toPlayground n cls extra content
     | "AllenSL"          `elem` cls = playTemplate [("system", "allenSL")]
     | "AllenSLPlus"      `elem` cls = playTemplate [("system", "allenSLPlus")]
     | "ArthurSL"         `elem` cls = playTemplate [("system", "arthurSL"), ("guides", "indent"), ("options", "fonts resize")]
@@ -233,6 +253,7 @@ toPlayground cls extra content
     | "SecondOrder"      `elem` cls = playTemplate [("system", "secondOrder")]
     | "SeparativeST"     `elem` cls = playTemplate [("system", "separativeSetTheory"), ("options","resize render")]
     | "OpenLogicExHOArith" `elem` cls = playTemplate [("system", "openLogicExHOArith"),("options","resize render")]
+    | "HOArithSumFL"     `elem` cls = playTemplate [("system", "hoArithSumFL"),("options","resize render")]
     | "TomassiPL"        `elem` cls = playTemplate [("system", "tomassiPL"), ("options","resize render hideNumbering")]
     | "TomassiQL"        `elem` cls = playTemplate [("system", "tomassiQL"), ("options","resize render hideNumbering")]
     | "WinklerFOL"       `elem` cls = playTemplate [("system", "winklerFOL"), ("guides", "fitch"), ("options", "resize")]
@@ -251,7 +272,13 @@ toPlayground cls extra content
     | "ZachTFL2019"      `elem` cls = playTemplate [("system", "thomasBolducAndZachTFL2019"), ("options","render")]
     | "ZachTFLCore"      `elem` cls = playTemplate [("system", "thomasBolducAndZachTFLCore"), ("options","render")]
     | otherwise = playTemplate []
-    where fixed = [("type","proofchecker")]
+    where fixed = [ ("type","proofchecker")
+                  , ("submission", T.concat ["saveAs:playground-", T.pack (show n)])
+                  -- the storage-key can't be clobbered by an author-supplied
+                  -- submission attribute (e.g. submission="none"), unlike the
+                  -- saveAs identifier above
+                  , ("storage-key", T.concat ["playground-", T.pack (show n)])
+                  ]
           playTemplate opts = template (unions [fromList extra, fromList opts, fromList fixed]) "Playground" (unlines' $ formatChunk content)
 
 template :: Map Text Text -> Text -> Text -> Block

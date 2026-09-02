@@ -1,0 +1,19 @@
+-- Sum of the first x+1 odd numbers is a perfect square:
+-- Σy=0..x. (2y + 1) = (x + 1)², proved by induction in hoArithSumFL
+-- using numerals and "+1" steps (no successor notation).
+-- Appears as a worked example in the HOArithSum demo document
+-- (Carnap-Documentation/doc/HOArithSum_Demo.md).
+logic hoArithSumFL
+
+lemma OddSquare: |- Ax(Σy=0..x. ((2*y)+1) = (x+1)*(x+1))
+begin
+Σy=0..0. ((2*y)+1) = (2*0)+1 :ΣZ
+(2*0)+1 = (0+1)*(0+1) :Poly
+Σy=0..0. ((2*y)+1) = (0+1)*(0+1) :EQ 1, 2
+   Σy=0..t. ((2*y)+1) = (t+1)*(t+1) :AS
+   Σy=0..t+1. ((2*y)+1) = (Σy=0..t. ((2*y)+1)) + ((2*(t+1))+1) :ΣS
+   Σy=0..t+1. ((2*y)+1) = ((t+1)*(t+1)) + ((2*(t+1))+1) :EQ 4, 5
+   ((t+1)*(t+1)) + ((2*(t+1))+1) = ((t+1)+1)*((t+1)+1) :Poly
+   Σy=0..t+1. ((2*y)+1) = ((t+1)+1)*((t+1)+1) :EQ 7, 6
+Ax(Σy=0..x. ((2*y)+1) = (x+1)*(x+1)) :Ind 3, 4-8
+end

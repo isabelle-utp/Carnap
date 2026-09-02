@@ -92,11 +92,20 @@ checkerWith options updaters iog@(IOGoal i o g content opts) w = do
            setAttribute i "data-gramm" "false" -- attempt to disable grammarly
            setInnerHTML i (Just (trim content))
            pageId <- getPageId
-           let exerciseId = case M.lookup "submission" opts of
-                                Just s | take 7 s == "saveAs:" -> drop 7 s
-                                _ -> case M.lookup "goal" opts of
-                                         Just g' -> g'
-                                         Nothing -> trim content
+           -- Prefer an explicit per-document storage key so that proof boxes
+           -- sharing a goal/problem number don't collide in localStorage. The
+           -- submission identifier (below) is kept separate for the gradebook.
+           let exerciseId = case M.lookup "storage-key" opts of
+                                Just k -> k
+                                _ -> case M.lookup "submission" opts of
+                                         Just s | take 7 s == "saveAs:" -> drop 7 s
+                                         _ -> case (M.lookup "goal" opts, trim content) of
+                                                  (Just g', _) -> g'
+                                                  (_, c) | not (null c) -> c
+                                                  -- a bare box (e.g. an empty playground) has
+                                                  -- nothing distinguishing it, so fall back to
+                                                  -- its position on the page
+                                                  _ -> maybe "" ('@':) (M.lookup "ordinal" opts)
                storageKey = "carnap:" ++ pageId ++ ":proofchecker:" ++ exerciseId
            msaved <- localStorageGetItem storageKey
            case msaved of
