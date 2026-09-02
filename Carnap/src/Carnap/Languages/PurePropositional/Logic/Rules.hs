@@ -790,6 +790,22 @@ orTautCancellation = replace (phin 1 .\/. (phin 2 .\/. lneg (phin 2))) (phin 2 .
                    ++ replace (phin 1 .\/. (lneg (phin 2) .\/. phin 2)) (lneg (phin 2) .\/. phin 2)
                    ++ replace ((lneg (phin 2) .\/. phin 2) .\/. phin 1) (lneg (phin 2) .\/. phin 2)
 
+andUnit :: ReplacementBooleanVariants lex b
+andUnit = replace (phin 1 ./\. lverum) (phin 1)
+       ++ replace (lverum ./\. phin 1) (phin 1)
+
+orUnit :: ReplacementBooleanVariants lex b
+orUnit = replace (phin 1 .\/. lfalsum) (phin 1)
+      ++ replace (lfalsum .\/. phin 1) (phin 1)
+
+andZero :: ReplacementBooleanVariants lex b
+andZero = replace (phin 1 ./\. lfalsum) lfalsum
+       ++ replace (lfalsum ./\. phin 1) lfalsum
+
+orZero :: ReplacementBooleanVariants lex b
+orZero = replace (phin 1 .\/. lverum) lverum
+      ++ replace (lverum .\/. phin 1) lverum
+
 ----------------------------------------
 --  1.2.3 Infinitary Variation Rules  --
 ----------------------------------------
