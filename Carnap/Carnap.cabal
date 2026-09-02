@@ -45,6 +45,7 @@ library
                      , Carnap.Languages.PurePropositional.Logic.EbelsDuggan
                      , Carnap.Languages.PurePropositional.Logic.Equivalence
                      , Carnap.Languages.PurePropositional.Logic.FosterAndLaursen
+                     , Carnap.Languages.PurePropositional.Logic.FosterPropEq
                      , Carnap.Languages.PurePropositional.Logic.Gallow
                      , Carnap.Languages.PurePropositional.Logic.Gamut
                      , Carnap.Languages.PurePropositional.Logic.Gentzen
