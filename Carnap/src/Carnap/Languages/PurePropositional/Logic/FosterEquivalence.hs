@@ -49,6 +49,7 @@ data FosterPropEq = AndComm      | CommAnd
                  | OrUnit1  | OrUnit2  | RepOrUnit1  | RepOrUnit2
                  | AndZero1 | AndZero2 | RepAndZero1 | RepAndZero2
                  | OrZero1  | OrZero2  | RepOrZero1  | RepOrZero2
+                 | NegTop | RepNegTop | NegBot | RepNegBot
                  | Pr (Maybe [(ClassicalSequentOver PurePropLexicon (Sequent (Form Bool)))])
     deriving (Eq)
 
@@ -121,6 +122,10 @@ instance Show FosterPropEq where
         show RepOrZero1  = "Zero"
         show OrZero2     = "Zero"
         show RepOrZero2  = "Zero"
+        show NegTop    = "Neg"
+        show RepNegTop = "Neg"
+        show NegBot    = "Neg"
+        show RepNegBot = "Neg"
         show (Pr _) = "Pr"
 
 instance Inference FosterPropEq PurePropLexicon (Form Bool) where
@@ -192,6 +197,10 @@ instance Inference FosterPropEq PurePropLexicon (Form Bool) where
         ruleOf RepOrZero1  = orZero !! 1
         ruleOf OrZero2     = orZero !! 2
         ruleOf RepOrZero2  = orZero !! 3
+        ruleOf NegTop    = negatedConstants !! 0
+        ruleOf RepNegTop = negatedConstants !! 1
+        ruleOf NegBot    = negatedConstants !! 2
+        ruleOf RepNegBot = negatedConstants !! 3
         ruleOf (Pr _) = axiom
 
         restriction (Pr prems) = Just (premConstraint prems)
@@ -219,6 +228,7 @@ parseFosterPropEq rtc = do
             "dem" -> [DM1,DM2,DM3,DM4]
             "unit" -> [AndUnit1, RepAndUnit1, AndUnit2, RepAndUnit2, OrUnit1, RepOrUnit1, OrUnit2, RepOrUnit2]
             "zero"  -> [AndZero1, RepAndZero1, AndZero2, RepAndZero2, OrZero1, RepOrZero1, OrZero2, RepOrZero2]
+            "neg"  -> [NegTop, RepNegTop, NegBot, RepNegBot]
             "pr" -> [Pr (problemPremises rtc)]
     where caseInsensitiveChar c = char (toLower c) <|> char (toUpper c)
           caseInsensitiveString s = try (mapM caseInsensitiveChar s) <?> "\"" ++ s ++ "\""
