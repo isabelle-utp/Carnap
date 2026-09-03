@@ -806,6 +806,10 @@ orZero :: ReplacementBooleanVariants lex b
 orZero = replace (phin 1 .\/. lverum) lverum
       ++ replace (lverum .\/. phin 1) lverum
 
+negatedConstants :: ReplacementBooleanVariants lex b
+negatedConstants = replace (lneg lverum) lfalsum
+                ++ replace (lneg lfalsum) lverum
+
 ----------------------------------------
 --  1.2.3 Infinitary Variation Rules  --
 ----------------------------------------
