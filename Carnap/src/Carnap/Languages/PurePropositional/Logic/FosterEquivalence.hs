@@ -217,8 +217,8 @@ parseFosterPropEq rtc = do
                      ]
             "dist" -> [OrDistR, DistOrR, AndDistR, DistAndR, OrDistL,DistOrL,AndDistL,DistAndL]
             "dem" -> [DM1,DM2,DM3,DM4]
-            "Unit" -> [AndUnit1, RepAndUnit1, AndUnit2, RepAndUnit2, OrUnit1, RepOrUnit1, OrUnit2, RepOrUnit2]
-            "Zero"  -> [AndZero1, RepAndZero1, AndZero2, RepAndZero2, OrZero1, RepOrZero1, OrZero2, RepOrZero2]
+            "unit" -> [AndUnit1, RepAndUnit1, AndUnit2, RepAndUnit2, OrUnit1, RepOrUnit1, OrUnit2, RepOrUnit2]
+            "zero"  -> [AndZero1, RepAndZero1, AndZero2, RepAndZero2, OrZero1, RepOrZero1, OrZero2, RepOrZero2]
             "pr" -> [Pr (problemPremises rtc)]
     where caseInsensitiveChar c = char (toLower c) <|> char (toUpper c)
           caseInsensitiveString s = try (mapM caseInsensitiveChar s) <?> "\"" ++ s ++ "\""
