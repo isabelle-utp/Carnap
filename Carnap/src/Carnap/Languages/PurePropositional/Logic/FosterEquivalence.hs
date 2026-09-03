@@ -44,10 +44,6 @@ data FosterPropEq = AndComm      | CommAnd
                  | OrAbsorb3    | AbsorbOr3
                  | OrAbsorb4    | AbsorbOr4
                  | NCRep        | RepNC
-                 | Simp1  | Simp2  | Simp3  | Simp4  | Simp5  | Simp6  | Simp7  | Simp8  | Simp9  | Simp10 
-                 | Simp11 | Simp12 | Simp13 | Simp14 | Simp15 | Simp16 | Simp17 | Simp18 | Simp19 | Simp20 
-                 | Simp21 | Simp22 | Simp23 | Simp24 | Simp25 | Simp26 | Simp27 | Simp28 | Simp29 | Simp30 
-                 | Simp31 | Simp32
                  | DM1 | DM2 | DM3 | DM4
                  | AndUnit1 | AndUnit2 | RepAndUnit1 | RepAndUnit2
                  | OrUnit1  | OrUnit2  | RepOrUnit1  | RepOrUnit2
@@ -109,54 +105,22 @@ instance Show FosterPropEq where
         show AbsorbOr3 = "Abs"
         show OrAbsorb4 = "Abs"
         show AbsorbOr4 = "Abs"
-        show Simp1 = "Simp"
-        show Simp2 = "Simp"
-        show Simp3 = "Simp"
-        show Simp4 = "Simp"
-        show Simp5 = "Simp"
-        show Simp6 = "Simp"
-        show Simp7 = "Simp"
-        show Simp8 = "Simp"
-        show Simp9 = "Simp"
-        show Simp10 = "Simp"
-        show Simp11 = "Simp"
-        show Simp12 = "Simp"
-        show Simp13 = "Simp"
-        show Simp14 = "Simp"
-        show Simp15 = "Simp"
-        show Simp16 = "Simp"
-        show Simp17 = "Simp"
-        show Simp18 = "Simp"
-        show Simp19 = "Simp"
-        show Simp20 = "Simp"
-        show Simp21 = "Simp"
-        show Simp22 = "Simp"
-        show Simp23 = "Simp"
-        show Simp24 = "Simp"
-        show Simp25 = "Simp"
-        show Simp26 = "Simp"
-        show Simp27 = "Simp"
-        show Simp28 = "Simp"
-        show Simp29 = "Simp"
-        show Simp30 = "Simp"
-        show Simp31 = "Simp"
-        show Simp32 = "Simp"
-        show AndUnit1    = "Iden"
-        show RepAndUnit1 = "Iden"
-        show AndUnit2    = "Iden"
-        show RepAndUnit2 = "Iden"
-        show OrUnit1     = "Iden"
-        show RepOrUnit1  = "Iden"
-        show OrUnit2     = "Iden"
-        show RepOrUnit2  = "Iden"
-        show AndZero1    = "Dom"
-        show RepAndZero1 = "Dom"
-        show AndZero2    = "Dom"
-        show RepAndZero2 = "Dom"
-        show OrZero1     = "Dom"
-        show RepOrZero1  = "Dom"
-        show OrZero2     = "Dom"
-        show RepOrZero2  = "Dom"
+        show AndUnit1    = "Unit"
+        show RepAndUnit1 = "Unit"
+        show AndUnit2    = "Unit"
+        show RepAndUnit2 = "Unit"
+        show OrUnit1     = "Unit"
+        show RepOrUnit1  = "Unit"
+        show OrUnit2     = "Unit"
+        show RepOrUnit2  = "Unit"
+        show AndZero1    = "Zero"
+        show RepAndZero1 = "Zero"
+        show AndZero2    = "Zero"
+        show RepAndZero2 = "Zero"
+        show OrZero1     = "Zero"
+        show RepOrZero1  = "Zero"
+        show OrZero2     = "Zero"
+        show RepOrZero2  = "Zero"
         show (Pr _) = "Pr"
 
 instance Inference FosterPropEq PurePropLexicon (Form Bool) where
@@ -212,38 +176,6 @@ instance Inference FosterPropEq PurePropLexicon (Form Bool) where
         ruleOf DM2 = deMorgansLaws !! 1
         ruleOf DM3 = deMorgansLaws !! 2
         ruleOf DM4 = deMorgansLaws !! 3
-        ruleOf Simp1 = andTautCancellation !! 0
-        ruleOf Simp2 = andTautCancellation !! 1 
-        ruleOf Simp3 = andTautCancellation !! 2 
-        ruleOf Simp4 = andTautCancellation !! 3 
-        ruleOf Simp5 = andTautCancellation !! 4 
-        ruleOf Simp6 = andTautCancellation !! 5 
-        ruleOf Simp7 = andTautCancellation !! 6 
-        ruleOf Simp8 = andTautCancellation !! 7 
-        ruleOf Simp9 = orTautCancellation !! 0
-        ruleOf Simp10 = orTautCancellation !! 1
-        ruleOf Simp11 = orTautCancellation !! 2
-        ruleOf Simp12 = orTautCancellation !! 3
-        ruleOf Simp13 = orTautCancellation !! 4
-        ruleOf Simp14 = orTautCancellation !! 5
-        ruleOf Simp15 = orTautCancellation !! 6
-        ruleOf Simp16 = orTautCancellation !! 7
-        ruleOf Simp17 = andContCancellation !! 0
-        ruleOf Simp18 = andContCancellation !! 1
-        ruleOf Simp19 = andContCancellation !! 2
-        ruleOf Simp20 = andContCancellation !! 3
-        ruleOf Simp21 = andContCancellation !! 4
-        ruleOf Simp22 = andContCancellation !! 5
-        ruleOf Simp23 = andContCancellation !! 6
-        ruleOf Simp24 = andContCancellation !! 7
-        ruleOf Simp25 = orContCancellation !! 0
-        ruleOf Simp26 = orContCancellation !! 1
-        ruleOf Simp27 = orContCancellation !! 2
-        ruleOf Simp28 = orContCancellation !! 3
-        ruleOf Simp29 = orContCancellation !! 4
-        ruleOf Simp30 = orContCancellation !! 5
-        ruleOf Simp31 = orContCancellation !! 6
-        ruleOf Simp32 = orContCancellation !! 7
         ruleOf AndUnit1    = andUnit !! 0
         ruleOf RepAndUnit1 = andUnit !! 1
         ruleOf AndUnit2    = andUnit !! 2
@@ -270,7 +202,7 @@ instance Inference FosterPropEq PurePropLexicon (Form Bool) where
 
 parseFosterPropEq :: RuntimeDeductionConfig PurePropLexicon (Form Bool) -> Parsec String u [FosterPropEq]
 parseFosterPropEq rtc = do 
-        r <- choice (map (try . caseInsensitiveString) ["Comm", "DN", "Cond", "Bicond", "DeM", "Assoc", "Abs", "Id", "Dist", "PR", "Simp", "Iden", "Dom"])
+        r <- choice (map (try . caseInsensitiveString) ["Comm", "DN", "Cond", "Bicond", "DeM", "Assoc", "Abs", "Id", "Dist", "PR", "Unit", "Zero"])
         return $ case map toLower r of
             "comm"-> [AndComm,CommAnd,OrComm,CommOr,IffComm,CommIff]
             "dn" -> [DNRep,RepDN]
@@ -283,14 +215,10 @@ parseFosterPropEq rtc = do
                      ,AndAbsorb3,AbsorbAnd3,OrAbsorb3,AbsorbOr3
                      ,AndAbsorb4,AbsorbAnd4,OrAbsorb4,AbsorbOr4
                      ]
-            "simp" -> [Simp1, Simp2, Simp3, Simp4, Simp5, Simp6, Simp7, Simp8, Simp9, Simp10
-                      , Simp11, Simp12, Simp13, Simp14, Simp15, Simp16, Simp17, Simp18, Simp19, Simp20
-                      , Simp21, Simp22, Simp23, Simp24, Simp25, Simp26, Simp27, Simp28, Simp29, Simp30
-                      , Simp31, Simp32 ]
             "dist" -> [OrDistR, DistOrR, AndDistR, DistAndR, OrDistL,DistOrL,AndDistL,DistAndL]
             "dem" -> [DM1,DM2,DM3,DM4]
-            "iden" -> [AndUnit1, RepAndUnit1, AndUnit2, RepAndUnit2, OrUnit1, RepOrUnit1, OrUnit2, RepOrUnit2]
-            "dom"  -> [AndZero1, RepAndZero1, AndZero2, RepAndZero2, OrZero1, RepOrZero1, OrZero2, RepOrZero2]
+            "Unit" -> [AndUnit1, RepAndUnit1, AndUnit2, RepAndUnit2, OrUnit1, RepOrUnit1, OrUnit2, RepOrUnit2]
+            "Zero"  -> [AndZero1, RepAndZero1, AndZero2, RepAndZero2, OrZero1, RepOrZero1, OrZero2, RepOrZero2]
             "pr" -> [Pr (problemPremises rtc)]
     where caseInsensitiveChar c = char (toLower c) <|> char (toUpper c)
           caseInsensitiveString s = try (mapM caseInsensitiveChar s) <?> "\"" ++ s ++ "\""
