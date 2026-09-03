@@ -49,7 +49,7 @@ parseNeg :: (BooleanLanguage l, Monad m) => ParsecT String u m (l -> l)
 parseNeg = do spaces >> (string "-" <|> string "~" <|> string "¬" <|> string "not") >> spaces >> return lneg
 
 booleanConstParser :: (BooleanConstLanguage l, Monad m) => ParsecT String u m l
-booleanConstParser = stringsToTry ["!?","_|_","⊥"] lfalsum <|> stringsToTry ["⊤"] lverum 
+booleanConstParser = stringsToTry ["!?","_|_","⊥"] lfalsum <|> stringsToTry ["~?","TOP","⊤"] lverum
 
 parseNec :: (ModalLanguage l, Monad m) => ParsecT String u m (l -> l)
 parseNec = do spaces >> (string "[]" <|> string "□") >> return nec
