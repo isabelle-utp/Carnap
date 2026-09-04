@@ -211,7 +211,7 @@ instance Inference FosterPropEq PurePropLexicon (Form Bool) where
 
 parseFosterPropEq :: RuntimeDeductionConfig PurePropLexicon (Form Bool) -> Parsec String u [FosterPropEq]
 parseFosterPropEq rtc = do 
-        r <- choice (map (try . caseInsensitiveString) ["Comm", "DN", "Cond", "Bicond", "DeM", "Assoc", "Abs", "Id", "Dist", "PR", "Unit", "Zero"])
+        r <- choice (map (try . caseInsensitiveString) ["Comm", "DN", "Cond", "Bicond", "DeM", "Assoc", "Abs", "Id", "Dist", "PR", "Unit", "Zero", "Neg"])
         return $ case map toLower r of
             "comm"-> [AndComm,CommAnd,OrComm,CommOr,IffComm,CommIff]
             "dn" -> [DNRep,RepDN]
