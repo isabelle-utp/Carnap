@@ -42,7 +42,6 @@ data FosterAndLaursenTFLCore = ConjIntro  | As
                                 deriving (Eq)
 
 data FosterAndLaursenTFL = Core FosterAndLaursenTFLCore
-                            | DisSyllo1    | DisSyllo2
                             | ModTollens   | DoubleNegElim  
                             | DoubleNegIntro
                             | Lem1         | Lem2
@@ -86,8 +85,6 @@ instance Show FosterAndLaursenTFLCore where
 
 instance Show FosterAndLaursenTFL where
         show (Core x)     = show x
-        show DisSyllo1    = "DS"
-        show DisSyllo2    = "DS"
         show ModTollens   = "MT"
         show DoubleNegElim = "DNE"
         show DoubleNegIntro= "DNI"
@@ -169,8 +166,6 @@ instance Inference FosterAndLaursenTFLCore PurePropLexicon (Form Bool) where
 
 instance Inference FosterAndLaursenTFL PurePropLexicon (Form Bool) where
         ruleOf (Core x)   = ruleOf x
-        ruleOf DisSyllo1  = modusTollendoPonensVariations !! 0 
-        ruleOf DisSyllo2  = modusTollendoPonensVariations !! 1
         ruleOf ModTollens = modusTollens
         ruleOf DoubleNegElim  = doubleNegationElimination
         ruleOf DoubleNegIntro = doubleNegationIntroduction
@@ -243,10 +238,9 @@ parseFosterAndLaursenTFLCore rtc = do r <- choice (map (try . string) [ "AS","PR
 
 parseFosterAndLaursenTFL :: RuntimeDeductionConfig PurePropLexicon (Form Bool) -> Parsec String u [FosterAndLaursenTFL]
 parseFosterAndLaursenTFL rtc = try parseExt <|> (map Core <$> parseFosterAndLaursenTFLCore rtc)
-        where parseExt = do r <- choice (map (try . string) ["DS","MT","DNE","~~E","¬¬E","--E", "DNI", "~~I","¬¬I","--I","LEM","DeM", "NBD", "BMT"])
+        where parseExt = do r <- choice (map (try . string) ["MT","DNE","~~E","¬¬E","--E", "DNI", "~~I","¬¬I","--I","LEM","DeM", "NBD", "BMT"])
                             case r of
-                               r | r == "DS"   -> return [DisSyllo1,DisSyllo2]
-                                 | r == "MT"   -> return [ModTollens]
+                               r | r == "MT"   -> return [ModTollens]
                                  | r `elem` ["DNE","~~E", "¬¬E","--E"] -> return [DoubleNegElim]
                                  | r `elem` ["DNI","~~I","¬¬I","--I"] -> return [DoubleNegIntro]
                                  | r == "LEM"  -> return [Lem1,Lem2,Lem3,Lem4]
