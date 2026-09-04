@@ -229,7 +229,7 @@ instance Inference FosterPropEq PurePropLexicon (Form Bool) where
 
 parseFosterPropEq :: RuntimeDeductionConfig PurePropLexicon (Form Bool) -> Parsec String u [FosterPropEq]
 parseFosterPropEq rtc = do 
-        r <- choice (map (try . caseInsensitiveString) ["Comm", "DN", "Cond", "Bicond", "DeM", "Assoc", "Abs", "Id", "Dist", "PR", "Unit", "Zero", "LEM", "LC", "Neg"])
+        r <- choice (map (try . caseInsensitiveString) ["Comm", "DN", "Cond", "Bicond", "DeM", "Assoc", "Abs", "Id", "Dist", "PR", "LHS", "Unit", "Zero", "LEM", "LC", "Neg"])
         return $ case map toLower r of
             "comm"-> [AndComm,CommAnd,OrComm,CommOr,IffComm,CommIff]
             "dn" -> [DNRep,RepDN]
@@ -249,6 +249,7 @@ parseFosterPropEq rtc = do
             "neg"  -> [NegTop, RepNegTop, NegBot, RepNegBot]
             "lem"  -> [LEM, RepLEM, LEM2, RepLEM2]
             "lc"   -> [LC, RepLC, LC2, RepLC2]
+            "lhs" -> [Pr (problemPremises rtc)]
             "pr" -> [Pr (problemPremises rtc)]
     where caseInsensitiveChar c = char (toLower c) <|> char (toUpper c)
           caseInsensitiveString s = try (mapM caseInsensitiveChar s) <?> "\"" ++ s ++ "\""
@@ -257,7 +258,7 @@ parseFosterPropEqProof :: RuntimeDeductionConfig PurePropLexicon (Form Bool) -> 
 parseFosterPropEqProof rtc = toDeductionHilbertImplicit (parseFosterPropEq rtc) (purePropFormulaParser thomasBolducZachOpts)
 
 fosterPropEqCalc = mkNDCalc 
-    { ndRenderer = NoRender
+    { ndRenderer = CustomRender (\seq -> show (antecedent seq) ++ " ≡ " ++ show (succendent seq))
     , ndParseProof = parseFosterPropEqProof
     , ndProcessLine = hoProcessLineHilbertImplicit
     , ndProcessLineMemo = Just hoProcessLineHilbertImplicitMemo
