@@ -49,6 +49,8 @@ data FosterPropEq = AndComm      | CommAnd
                  | OrUnit1  | OrUnit2  | RepOrUnit1  | RepOrUnit2
                  | AndZero1 | AndZero2 | RepAndZero1 | RepAndZero2
                  | OrZero1  | OrZero2  | RepOrZero1  | RepOrZero2
+                 | LEM | RepLEM | LEM2 | RepLEM2
+                 | LC  | RepLC  | LC2  | RepLC2
                  | NegTop | RepNegTop | NegBot | RepNegBot
                  | Pr (Maybe [(ClassicalSequentOver PurePropLexicon (Sequent (Form Bool)))])
     deriving (Eq)
@@ -122,6 +124,14 @@ instance Show FosterPropEq where
         show RepOrZero1  = "Zero"
         show OrZero2     = "Zero"
         show RepOrZero2  = "Zero"
+        show LEM     = "LEM"
+        show RepLEM  = "LEM"
+        show LEM2    = "LEM"
+        show RepLEM2 = "LEM"
+        show LC      = "LC"
+        show RepLC   = "LC"
+        show LC2     = "LC"
+        show RepLC2  = "LC"
         show NegTop    = "Neg"
         show RepNegTop = "Neg"
         show NegBot    = "Neg"
@@ -197,6 +207,14 @@ instance Inference FosterPropEq PurePropLexicon (Form Bool) where
         ruleOf RepOrZero1  = orZero !! 1
         ruleOf OrZero2     = orZero !! 2
         ruleOf RepOrZero2  = orZero !! 3
+        ruleOf LEM     = lawOfExcludedMiddle !! 0
+        ruleOf RepLEM  = lawOfExcludedMiddle !! 1
+        ruleOf LEM2    = lawOfExcludedMiddle !! 2
+        ruleOf RepLEM2 = lawOfExcludedMiddle !! 3
+        ruleOf LC      = lawOfContradiction !! 0
+        ruleOf RepLC   = lawOfContradiction !! 1
+        ruleOf LC2     = lawOfContradiction !! 2
+        ruleOf RepLC2  = lawOfContradiction !! 3        
         ruleOf NegTop    = negatedConstants !! 0
         ruleOf RepNegTop = negatedConstants !! 1
         ruleOf NegBot    = negatedConstants !! 2
@@ -211,7 +229,7 @@ instance Inference FosterPropEq PurePropLexicon (Form Bool) where
 
 parseFosterPropEq :: RuntimeDeductionConfig PurePropLexicon (Form Bool) -> Parsec String u [FosterPropEq]
 parseFosterPropEq rtc = do 
-        r <- choice (map (try . caseInsensitiveString) ["Comm", "DN", "Cond", "Bicond", "DeM", "Assoc", "Abs", "Id", "Dist", "PR", "Unit", "Zero", "Neg"])
+        r <- choice (map (try . caseInsensitiveString) ["Comm", "DN", "Cond", "Bicond", "DeM", "Assoc", "Abs", "Id", "Dist", "PR", "Unit", "Zero", "LEM", "LC", "Neg"])
         return $ case map toLower r of
             "comm"-> [AndComm,CommAnd,OrComm,CommOr,IffComm,CommIff]
             "dn" -> [DNRep,RepDN]
@@ -229,6 +247,8 @@ parseFosterPropEq rtc = do
             "unit" -> [AndUnit1, RepAndUnit1, AndUnit2, RepAndUnit2, OrUnit1, RepOrUnit1, OrUnit2, RepOrUnit2]
             "zero"  -> [AndZero1, RepAndZero1, AndZero2, RepAndZero2, OrZero1, RepOrZero1, OrZero2, RepOrZero2]
             "neg"  -> [NegTop, RepNegTop, NegBot, RepNegBot]
+            "lem"  -> [LEM, RepLEM, LEM2, RepLEM2]
+            "lc"   -> [LC, RepLC, LC2, RepLC2]
             "pr" -> [Pr (problemPremises rtc)]
     where caseInsensitiveChar c = char (toLower c) <|> char (toUpper c)
           caseInsensitiveString s = try (mapM caseInsensitiveChar s) <?> "\"" ++ s ++ "\""
@@ -243,9 +263,5 @@ fosterPropEqCalc = mkNDCalc
     , ndProcessLineMemo = Just hoProcessLineHilbertImplicitMemo
     , ndParseSeq = parseSeqOver (purePropFormulaParser thomasBolducZachOpts)
     , ndParseForm = (purePropFormulaParser thomasBolducZachOpts)
-    , ndNotation = dropBotRight . dropOuterParens 
+    , ndNotation = dropOuterParens 
     }
-
-dropBotRight s = case (break (== '⊢') s) of
-      (a,"⊢ ⊥") -> a ++ "⊢ ?"
-      _ -> s
