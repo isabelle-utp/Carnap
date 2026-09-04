@@ -806,6 +806,14 @@ orZero :: ReplacementBooleanVariants lex b
 orZero = replace (phin 1 .\/. lverum) lverum
       ++ replace (lverum .\/. phin 1) lverum
 
+lawOfExcludedMiddle :: ReplacementBooleanVariants lex b
+lawOfExcludedMiddle = replace (phin 1 .\/. lneg (phin 1)) lverum
+                   ++ replace (lneg (phin 1) .\/. phin 1) lverum
+
+lawOfContradiction :: ReplacementBooleanVariants lex b
+lawOfContradiction = replace (phin 1 ./\. lneg (phin 1)) lfalsum
+                  ++ replace (lneg (phin 1) ./\. phin 1) lfalsum
+
 negatedConstants :: ReplacementBooleanVariants lex b
 negatedConstants = replace (lneg lverum) lfalsum
                 ++ replace (lneg lfalsum) lverum
