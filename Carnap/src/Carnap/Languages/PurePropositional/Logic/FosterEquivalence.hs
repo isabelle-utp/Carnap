@@ -258,11 +258,18 @@ parseFosterPropEqProof :: RuntimeDeductionConfig PurePropLexicon (Form Bool) -> 
 parseFosterPropEqProof rtc = toDeductionHilbertImplicit (parseFosterPropEq rtc) (purePropFormulaParser thomasBolducZachOpts)
 
 fosterPropEqCalc = mkNDCalc 
-    { ndRenderer = CustomRender (\seq -> show (antecedent seq) ++ " ≡ " ++ show (succendent seq))
+    { ndRenderer = NoRender
     , ndParseProof = parseFosterPropEqProof
     , ndProcessLine = hoProcessLineHilbertImplicit
     , ndProcessLineMemo = Just hoProcessLineHilbertImplicitMemo
     , ndParseSeq = parseSeqOver (purePropFormulaParser thomasBolducZachOpts)
     , ndParseForm = (purePropFormulaParser thomasBolducZachOpts)
-    , ndNotation = dropOuterParens 
+    , ndNotation = formatEquationalSeq . dropOuterParens 
     }
+
+    -- Custom notation formatter that replaces the turnstile with the equivalence symbol
+formatEquationalSeq :: String -> String
+formatEquationalSeq s = case break (== '⊢') s of
+    (lhs, "⊢ ⊥") -> lhs ++ "≡ ?"  -- Preserves the original dropBotRight logic
+    (lhs, '⊢':rhs) -> lhs ++ "≡" ++ rhs
+    _ -> s
