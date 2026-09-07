@@ -35,6 +35,7 @@ import Carnap.Languages.PureFirstOrder.Logic.Cortens
 import Carnap.Languages.PureFirstOrder.Logic.Davis
 import Carnap.Languages.PureFirstOrder.Logic.EbelsDuggan
 import Carnap.Languages.PureFirstOrder.Logic.Equivalence
+import Carnap.Languages.PureFirstOrder.Logic.FosterEquivalence
 import Carnap.Languages.PureFirstOrder.Logic.FosterAndLaursen
 import Carnap.Languages.PureFirstOrder.Logic.Gallow
 import Carnap.Languages.PureFirstOrder.Logic.Gamut
@@ -78,6 +79,7 @@ ofFOLSys f sys | sys == "LogicBookPD"                     = Just $ f logicBookPD
                | sys == "fosterAndLaursenFOL2019"         = Just $ f fosterAndLaursenFOL2019Calc
                | sys == "fosterAndLaursenFOLCore"         = Just $ f fosterAndLaursenFOLCoreCalc
                | sys == "fosterAndLaursenFOLPlus2019"     = Just $ f fosterAndLaursenFOLPlus2019Calc
+               | sys == "fosterFOLEq"                     = Just $ f fosterFOLEqCalc
                | sys == "gallowPL"                        = Just $ f gallowPLCalc
                | sys == "gallowPLPlus"                    = Just $ f gallowPLPlusCalc
                | sys == "gamutND"                         = Just $ f gamutNDCalc

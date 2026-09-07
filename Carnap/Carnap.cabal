@@ -92,6 +92,7 @@ library
                      , Carnap.Languages.PureFirstOrder.Logic.EbelsDuggan
                      , Carnap.Languages.PureFirstOrder.Logic.Equivalence
                      , Carnap.Languages.PureFirstOrder.Logic.FosterAndLaursen
+                     , Carnap.Languages.PureFirstOrder.Logic.FosterEquivalence
                      , Carnap.Languages.PureFirstOrder.Logic.Gallow
                      , Carnap.Languages.PureFirstOrder.Logic.Gamut
                      , Carnap.Languages.PureFirstOrder.Logic.Gentzen
