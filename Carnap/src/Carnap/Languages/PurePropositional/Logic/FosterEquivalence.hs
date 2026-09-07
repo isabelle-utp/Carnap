@@ -270,6 +270,5 @@ fosterPropEqCalc = mkNDCalc
     -- Custom notation formatter that replaces the turnstile with the equivalence symbol
 formatEquationalSeq :: String -> String
 formatEquationalSeq s = case break (== '⊢') s of
-    (lhs, "⊢ ⊥") -> lhs ++ "≡ ?"  -- Preserves the original dropBotRight logic
     (lhs, '⊢':rhs) -> lhs ++ "≡" ++ rhs
     _ -> s
