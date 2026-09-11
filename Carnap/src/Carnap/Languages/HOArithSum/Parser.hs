@@ -118,16 +118,10 @@ hoArithSumOptionsWith allowEllipsis = opts
         }
 
     -- Force equality and relational operators to parse both sides with parseArithTerm
-    atomicArithSentence = try (binaryOp "=" arithEquals parseArithTerm)
-                      <|> try (binaryOp "<" arithLessThan parseArithTerm)
-                      <|> try (binaryOp "/=" arithInequality parseArithTerm)
+    atomicArithSentence = try (equalsParser parseArithTerm)
+                      <|> try (lessThanParser parseArithTerm)
+                      <|> try (inequalityParser parseArithTerm)
                       <|> parsePredicateString extendedSymbols tparser
-
-    binaryOp sym cons termP = do
-        l <- termP
-        spaces >> string sym >> spaces
-        r <- termP
-        return (cons l r)
 
     atomicTerm = parenParser tparser
              <|> try parseNumeral
