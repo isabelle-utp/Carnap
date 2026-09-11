@@ -81,9 +81,8 @@ parseEllipsis :: Monad m => ParsecT String u m (HOArithSumLang (Term Int))
 parseEllipsis = string "..." >> spaces >> return ellipsisTerm
 
 -- Base atomic terms (no unparenthesized binary operators)
-parseAtomicTerm :: (Monad m, ElementaryArithmeticLanguage (HOArithSumLang (Term Int)))
-                => ParsecT String u m (HOArithSumLang (Term Int))
-                -> ParsecT String u m (HOArithSumLang (Term Int))
+parseAtomicTerm :: Parsec String u (HOArithSumLang (Term Int))
+                -> Parsec String u (HOArithSumLang (Term Int))
 parseAtomicTerm recurTerm = 
         wrappedWith '(' ')' recurTerm
     <|> wrappedWith '[' ']' recurTerm
