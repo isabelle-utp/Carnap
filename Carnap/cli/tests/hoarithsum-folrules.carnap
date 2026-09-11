@@ -1,0 +1,95 @@
+-- Tests for the FosterAndLaursen-style rule names in hoArithSumFL:
+-- the TFL layer (core + derived rules), the quantifier rules ∀I ∀E ∃I ∃E,
+-- the identity rules =I / =E, and quantifier negation CQ.
+
+logic hoArithSumFL
+
+--------------------------------------------------------------------------------
+-- TFL core rules
+--------------------------------------------------------------------------------
+
+lemma ConjIntroElim: x=0 /\ y=0 |- y=0 /\ x=0
+begin
+x=0/\y=0 :PR
+x=0 :/\E 1
+y=0 :/\E 1
+y=0/\x=0 :/\I 3, 2
+end
+
+lemma CondIntro: |- x=0 -> x=0
+begin
+0=0 :=I
+   x=0 :AS
+   x=0 :R 2
+x=0->x=0 :->I 2-3
+end
+
+lemma NegElimContElim: ~(x=0), x=0 |- 1=0
+begin
+~(x=0) :PR
+x=0 :PR
+_|_ :~E 1, 2
+1=0 :X 3
+end
+
+--------------------------------------------------------------------------------
+-- TFL derived rules
+--------------------------------------------------------------------------------
+
+lemma DisjSyllogism: ~(x=0), x=0 \/ x=1 |- x=1
+begin
+~(x=0) :PR
+x=0\/x=1 :PR
+x=1 :DS 2, 1
+end
+
+lemma DoubleNegE: ~(~(x=0)) |- x=0
+begin
+~(~(x=0)) :PR
+x=0 :DNE 1
+end
+
+--------------------------------------------------------------------------------
+-- Identity rules
+--------------------------------------------------------------------------------
+
+lemma Reflexivity: |- 0=0
+begin
+0=0 :=I
+end
+
+--------------------------------------------------------------------------------
+-- Quantifier rules
+--------------------------------------------------------------------------------
+
+lemma UnivElim: Ax(x=x) |- 0=0
+begin
+Ax(x=x) :PR
+0=0 :AE 1
+end
+
+lemma UnivIntro: |- Ax(x=x)
+begin
+t=t :=I
+Ax(x=x) :AI 1
+end
+
+lemma ExisIntro: |- Ex(x=x)
+begin
+0=0 :=I
+Ex(x=x) :EI 1
+end
+
+lemma ExisElim: Ex(x=0) |- Ey(y=0)
+begin
+Ex(x=0) :PR
+   t=0 :AS
+   Ey(y=0) :EI 2
+Ey(y=0) :EE 1, 2-3
+end
+
+lemma QuantNeg: ~Ax(x=0) |- Ex(~(x=0))
+begin
+~Ax(x=0) :PR
+Ex(~(x=0)) :CQ 1
+end

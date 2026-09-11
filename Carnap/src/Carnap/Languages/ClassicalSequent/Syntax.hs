@@ -318,8 +318,13 @@ antecedentNub ::
     , ACUI (ClassicalSequentOver lex)
     , MonadVar (ClassicalSequentOver lex) (State Int)
     ) => ClassicalSequentOver lex (Sequent a) -> ClassicalSequentOver lex (Sequent a)
-antecedentNub (x:|-:y) = (applySub (head subs) (GammaV 1) :|-: y)
+antecedentNub (x:|-:y) = (canonicalId (applySub (head subs) (GammaV 1)) :|-: y)
     where subs = evalState (acuiUnifySys (const False) [x :=: GammaV 1]) (0 :: Int)
+          -- The unifier's generic ACUI unit (SID, shown "∅") may be left
+          -- where all premises were discharged; in antecedent position the
+          -- canonical unit is the empty antecedent (Top, shown "⊤").
+          canonicalId SID = Top
+          canonicalId z = z
 
 multiCutLeft :: (Typeable a, Concretes lex a) => ClassicalSequentOver lex (Sequent a) -> [ClassicalSequentOver lex (Sequent a)]
 multiCutLeft r = zipWith gammafy (toListOf (lhs . concretes) r) [1..]

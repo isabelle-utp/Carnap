@@ -6,17 +6,17 @@ module Carnap.Languages.HOArithSum.Logic.FosterLaursen
     ) where
 
 import Text.Parsec
+import Text.Parsec.Error (newErrorMessage, Message(Message))
+import Text.Parsec.Pos (newPos)
 import Carnap.Core.Data.Types
 import Carnap.Core.Unification.Unification (applySub)
 import Carnap.Languages.HOArithSum.Syntax
 import Carnap.Languages.HOArithSum.Parser
 import Carnap.Languages.HOArithSum.Util (decidePolyEq)
 import Carnap.Languages.PureFirstOrder.Syntax (fogamma)
-import Carnap.Languages.PureFirstOrder.Logic
-    (FOLogic(ED1,ED2,UD,UI,EG,QN1,QN2,QN3,QN4,LL1,LL2,ALL1,ALL2,EL1,EL2,ID,SM,SL), parseFOLogic)
 import Carnap.Languages.PureFirstOrder.Logic.Rules
-import Carnap.Languages.SetTheory.Logic.Rules
-import Carnap.Languages.PurePropositional.Logic.Rules (axiom, premConstraint)
+import qualified Carnap.Languages.PurePropositional.Logic.FosterAndLaursen as P
+import Carnap.Languages.PurePropositional.Logic.Rules (axiom, premConstraint, fitchAssumptionCheck)
 import Carnap.Languages.ClassicalSequent.Syntax
 import Carnap.Languages.ClassicalSequent.Parser
 import Carnap.Calculi.Util
@@ -24,56 +24,54 @@ import Carnap.Calculi.NaturalDeduction.Syntax
 import Carnap.Calculi.NaturalDeduction.Parser
 import Carnap.Calculi.NaturalDeduction.Checker (hoProcessLineFitch, hoProcessLineFitchMemo)
 import Carnap.Languages.Util.LanguageClasses
-import Carnap.Core.Data.Optics (binaryOpPrism)
+import Carnap.Core.Data.Optics (binaryOpPrism, genChildren)
 import qualified Control.Lens
-import Control.Lens (preview)
+import Control.Lens (preview, over, toListOf, transform, cosmos)
 
 ------------------------------------------------------------
 -- Rule type
 ------------------------------------------------------------
 
+-- The rule set follows the FosterAndLaursen naming scheme: the full TFL
+-- layer (including derived rules) is embedded via the 'TFL' wrapper, and
+-- the quantifier and identity rules mirror FosterAndLaursenFOL.  On top of
+-- that sit the arithmetic rules particular to this system.
 data HOArithSumFL
-    = FO FOLogic
-    -- set-theory definitional unpacks (from HOArith)
-    | DefU1   | DefU2  | DefI1 | DefI2  | DefP1 | DefP2
-    | DefC1   | DefC2  | DefC3 | DefC4
-    | DefID1  | DefID2 | DefID3 | DefID4
-    | DefES1  | DefES2 | DefES3 | DefES4
-    | DefSub1 | DefSub2
-    | DefSep1 | DefSep2 | DefSep3 | DefSep4
-    -- new arithmetic / sum rules
+    = TFL P.FosterAndLaursenTFL
+    -- quantifier rules
+    | UI | UE | EI | EE1 | EE2
+    -- identity rules
+    | IDI | IDE1 | IDE2
+    | EqChain Int
+    | EqCong
+    -- quantifier negation
+    | QN1 | QN2 | QN3 | QN4
+    -- arithmetic / sum rules
     | Induction | InductionPlus
     | PolyEq
     | SumZero
     | SumSucc | SumPlus
     -- premise
     | Pr (Maybe [(ClassicalSequentOver HOArithSumLex (Sequent (Form Bool)))])
-    -- subproof assumption
-    | As
     deriving Eq
 
 instance Show HOArithSumFL where
-    show (FO LL1)  = "EQ"; show (FO LL2)  = "EQ"
-    show (FO ALL1) = "EQ"; show (FO ALL2) = "EQ"
-    show (FO x)    = show x
-    show (Pr _)    = "PR"
-    show DefU1     = "Def-U";  show DefU2     = "Def-U"
-    show DefI1     = "Def-I";  show DefI2     = "Def-I"
-    show DefC1     = "Def-C";  show DefC2     = "Def-C"
-    show DefC3     = "Def-C";  show DefC4     = "Def-C"
-    show DefID1    = "Def-=";  show DefID2    = "Def-="
-    show DefID3    = "Def-=";  show DefID4    = "Def-="
-    show DefES1    = "Def-\8709"; show DefES2 = "Def-\8709"
-    show DefES3    = "Def-\8709"; show DefES4 = "Def-\8709"
-    show DefP1     = "Def-P";  show DefP2     = "Def-P"
-    show DefSub1   = "Def-S";  show DefSub2   = "Def-S"
-    show DefSep1   = "Def-{}"; show DefSep2   = "Def-{}"
-    show DefSep3   = "Def-{}"; show DefSep4   = "Def-{}"
+    show (TFL x)   = show x
+    show UI        = "∀I"
+    show UE        = "∀E"
+    show EI        = "∃I"
+    show EE1       = "∃E"; show EE2 = "∃E"
+    show IDI       = "=I"
+    show IDE1      = "=E"; show IDE2 = "=E"
+    show (EqChain _) = "Chain"
+    show EqCong    = "EQR"
+    show QN1       = "CQ"; show QN2 = "CQ"
+    show QN3       = "CQ"; show QN4 = "CQ"
     show Induction = "Ind"; show InductionPlus = "Ind"
     show PolyEq    = "Poly"
     show SumZero   = "ΣZ"
     show SumSucc   = "ΣS"; show SumPlus = "ΣS"
-    show As        = "AS"
+    show (Pr _)    = "PR"
 
 ------------------------------------------------------------
 -- Schematic rules for Σ and induction
@@ -130,78 +128,94 @@ sumPlusRule = [] ∴ Top :|-: SS
 arithOne :: ClassicalSequentOver HOArithSumLex (Term Int)
 arithOne = arithSucc arithZero
 
+-- Transitivity for a chain of equations, cited as a list of lines rather
+-- than a subproof.  Each cited line must be an equality τi = τ(i+1), and
+-- together they must form a chain
+--
+--      τ1 = τ2          (each link individually justified)
+--      τ2 = τ3
+--      …
+--      τn = τ(n+1)
+--      τ1 = τ(n+1)      :Chain n,n-1,…,1
+--
+-- so that citing the n lines of the chain justifies the equality between
+-- the chain's first and last terms.  The links may be cited in any order,
+-- since the checker permutes the rule's premises when matching.  The
+-- conclusion's LHS and RHS are pinned to the first and last terms of the
+-- chain by unification, so any equation the user writes is accepted only
+-- if it is exactly τ1 = τ(n+1).
+eqChainRule :: Int -> SequentRule HOArithSumLex (Form Bool)
+eqChainRule n =
+    [ GammaV i :|-: SS (t i `equals` t (i + 1)) | i <- [1 .. n] ]
+    ∴ foldl1 (:+:) [ GammaV i | i <- [1 .. n] ] :|-: SS (t 1 `equals` t (n + 1))
+  where
+    t :: Int -> ClassicalSequentOver HOArithSumLex (Term Int)
+    t = taun
+
+maxEqChainLength :: Int
+maxEqChainLength = 8
+
+-- Congruence for equality: equals may be applied inside any term context.
+--
+--      τ = σ
+--      ───────────────
+--      θ(τ) = θ(σ)
+--
+-- θ is a schematic unary function, so it is solved for by higher-order
+-- matching against the conclusion: it stands for an arbitrary term with a
+-- hole, and so covers f(τ) = f(σ), τ + 1 = σ + 1, τ * τ = σ * σ, and so on.
+eqCongruenceRule :: SequentRule HOArithSumLex (Form Bool)
+eqCongruenceRule =
+    [ GammaV 1 :|-: SS (tau `equals` tau') ]
+    ∴ GammaV 1 :|-: SS (theta tau `equals` theta tau')
+
 ------------------------------------------------------------
 -- Inference instance
 ------------------------------------------------------------
 
 instance Inference HOArithSumFL HOArithSumLex (Form Bool) where
+    ruleOf r@(TFL _) = premisesOf r ∴ conclusionOf r
     ruleOf (Pr _)    = axiom
-    ruleOf As        = axiom
-    ruleOf DefU1     = unpackUnion !! 0
-    ruleOf DefU2     = unpackUnion !! 1
-    ruleOf DefI1     = unpackIntersection !! 0
-    ruleOf DefI2     = unpackIntersection !! 1
-    ruleOf DefC1     = unpackComplement !! 0
-    ruleOf DefC2     = unpackComplement !! 1
-    ruleOf DefC3     = unpackComplement !! 2
-    ruleOf DefC4     = unpackComplement !! 3
-    ruleOf DefID1    = unpackEquality !! 0
-    ruleOf DefID2    = unpackEquality !! 1
-    ruleOf DefID3    = unpackEquality !! 2
-    ruleOf DefID4    = unpackEquality !! 3
-    ruleOf DefES1    = unpackEmptySet !! 0
-    ruleOf DefES2    = unpackEmptySet !! 1
-    ruleOf DefES3    = unpackEmptySet !! 2
-    ruleOf DefES4    = unpackEmptySet !! 3
-    ruleOf DefSub1   = unpackSubset !! 0
-    ruleOf DefSub2   = unpackSubset !! 1
-    ruleOf DefP1     = unpackPowerset !! 0
-    ruleOf DefP2     = unpackPowerset !! 1
-    ruleOf DefSep1   = unpackSeparation !! 0
-    ruleOf DefSep2   = unpackSeparation !! 1
-    ruleOf DefSep3   = unpackSeparation !! 2
-    ruleOf DefSep4   = unpackSeparation !! 3
+    ruleOf UI        = universalGeneralization
+    ruleOf UE        = universalInstantiation
+    ruleOf EI        = existentialGeneralization
+    ruleOf EE1       = existentialDerivation !! 0
+    ruleOf EE2       = existentialDerivation !! 1
+    ruleOf IDI       = eqReflexivity
+    ruleOf IDE1      = leibnizLawVariations !! 0
+    ruleOf IDE2      = leibnizLawVariations !! 1
+    ruleOf (EqChain n) = eqChainRule n
+    ruleOf EqCong    = eqCongruenceRule
+    ruleOf QN1       = quantifierNegation !! 0
+    ruleOf QN2       = quantifierNegation !! 1
+    ruleOf QN3       = quantifierNegation !! 2
+    ruleOf QN4       = quantifierNegation !! 3
     ruleOf Induction = inductionRule
     ruleOf InductionPlus = inductionPlusRule
     ruleOf PolyEq    = polyEqRule
     ruleOf SumZero   = sumZeroRule
     ruleOf SumSucc   = sumSuccRule
     ruleOf SumPlus   = sumPlusRule
-    ruleOf (FO UI  ) = universalInstantiation
-    ruleOf (FO EG  ) = existentialGeneralization
-    ruleOf (FO UD  ) = universalGeneralization
-    ruleOf (FO ED1 ) = existentialDerivation !! 0
-    ruleOf (FO ED2 ) = existentialDerivation !! 1
-    ruleOf (FO QN1 ) = quantifierNegation !! 0
-    ruleOf (FO QN2 ) = quantifierNegation !! 1
-    ruleOf (FO QN3 ) = quantifierNegation !! 2
-    ruleOf (FO QN4 ) = quantifierNegation !! 3
-    ruleOf (FO LL1 ) = leibnizLawVariations !! 0
-    ruleOf (FO LL2 ) = leibnizLawVariations !! 1
-    ruleOf (FO ALL1) = antiLeibnizLawVariations !! 0
-    ruleOf (FO ALL2) = antiLeibnizLawVariations !! 1
-    ruleOf (FO EL1 ) = euclidsLawVariations !! 0
-    ruleOf (FO EL2 ) = euclidsLawVariations !! 1
-    ruleOf (FO ID  ) = eqReflexivity
-    ruleOf (FO SM  ) = eqSymmetry
 
-    premisesOf (FO (SL x)) = map liftSequent (premisesOf x)
+    premisesOf (TFL x) = map liftSequent (premisesOf x)
     premisesOf r = upperSequents (ruleOf r)
 
-    conclusionOf (FO (SL x)) = liftSequent (conclusionOf x)
+    conclusionOf (TFL x) = liftSequent (conclusionOf x)
     conclusionOf r = lowerSequent (ruleOf r)
 
+    indirectInference (TFL x) = indirectInference x
     indirectInference Induction     = Just assumptiveProof
     indirectInference InductionPlus = Just assumptiveProof
-    indirectInference (FO x)    = indirectInference x
-    indirectInference _         = Nothing
+    indirectInference x
+        | x `elem` [EE1, EE2] = Just assumptiveProof
+        | otherwise = Nothing
 
     restriction (Pr prems)  = Just (premConstraint prems)
-    restriction (FO UD)     = Just (eigenConstraint stau (SS (lall "v" $ phi' 1)) (fogamma 1))
+    restriction UI          = Just (eigenConstraint stau (SS (lall "v" $ phi' 1)) (fogamma 1))
         where stau = liftToSequent tau
-    restriction (FO ED1)    = Just (eigenConstraint stau (SS (lsome "v" $ phi' 1) :-: SS (phin 1)) (fogamma 1 :+: fogamma 2))
+    restriction EE1         = Just (eigenConstraint stau (SS (lsome "v" $ phi' 1) :-: SS (phin 1)) (fogamma 1 :+: fogamma 2))
         where stau = liftToSequent tau
-    restriction (FO ED2)    = Just (eigenConstraint stau (SS (lsome "v" $ phi' 1) :-: SS (phin 1)) (fogamma 1 :+: fogamma 2))
+    restriction EE2         = Just (eigenConstraint stau (SS (lsome "v" $ phi' 1) :-: SS (phin 1)) (fogamma 1 :+: fogamma 2))
         where stau = liftToSequent tau
     restriction Induction   = Just (eigenConstraint stau (SS (lall "v" $ phi' 1)) (fogamma 1 :+: fogamma 2))
         where stau = liftToSequent tau
@@ -210,6 +224,29 @@ instance Inference HOArithSumFL HOArithSumLex (Form Bool) where
     restriction PolyEq      = Just polyEqConstraint
     restriction _           = Nothing
 
+    globalRestriction (Left ded) n (TFL (P.Core P.CondIntro1)) = Just $ fitchAssumptionCheck n ded [([phin 1], [phin 2])]
+    globalRestriction (Left ded) n (TFL (P.Core P.CondIntro2)) = Just $ fitchAssumptionCheck n ded [([phin 1], [phin 2])]
+    globalRestriction (Left ded) n (TFL (P.Core P.BicoIntro1)) = Just $ fitchAssumptionCheck n ded [([phin 1], [phin 2]), ([phin 2], [phin 1])]
+    globalRestriction (Left ded) n (TFL (P.Core P.BicoIntro2)) = Just $ fitchAssumptionCheck n ded [([phin 1], [phin 2]), ([phin 2], [phin 1])]
+    globalRestriction (Left ded) n (TFL (P.Core P.BicoIntro3)) = Just $ fitchAssumptionCheck n ded [([phin 1], [phin 2]), ([phin 2], [phin 1])]
+    globalRestriction (Left ded) n (TFL (P.Core P.BicoIntro4)) = Just $ fitchAssumptionCheck n ded [([phin 1], [phin 2]), ([phin 2], [phin 1])]
+    globalRestriction (Left ded) n (TFL (P.Core P.DisjElim1))  = Just $ fitchAssumptionCheck n ded [([phin 1], [phin 3]), ([phin 2], [phin 3])]
+    globalRestriction (Left ded) n (TFL (P.Core P.DisjElim2))  = Just $ fitchAssumptionCheck n ded [([phin 1], [phin 3]), ([phin 2], [phin 3])]
+    globalRestriction (Left ded) n (TFL (P.Core P.DisjElim3))  = Just $ fitchAssumptionCheck n ded [([phin 1], [phin 3]), ([phin 2], [phin 3])]
+    globalRestriction (Left ded) n (TFL (P.Core P.DisjElim4))  = Just $ fitchAssumptionCheck n ded [([phin 1], [phin 3]), ([phin 2], [phin 3])]
+    globalRestriction (Left ded) n (TFL (P.Core P.NegeIntro1)) = Just $ fitchAssumptionCheck n ded [([phin 1], [lfalsum])]
+    globalRestriction (Left ded) n (TFL (P.Core P.NegeIntro2)) = Just $ fitchAssumptionCheck n ded [([phin 1], [lfalsum])]
+    globalRestriction (Left ded) n (TFL (P.Core P.Indirect1))  = Just $ fitchAssumptionCheck n ded [([lneg $ phin 1], [lfalsum])]
+    globalRestriction (Left ded) n (TFL (P.Core P.Indirect2))  = Just $ fitchAssumptionCheck n ded [([lneg $ phin 1], [lfalsum])]
+    globalRestriction (Left ded) n UI =
+        Just (notAssumedConstraint n ded (taun 1 :: ClassicalSequentOver HOArithSumLex (Term Int)))
+    globalRestriction (Left ded) n r | r `elem` [EE1, EE2] =
+        case dependencies (ded !! (n - 1)) of
+            Just ls -> firstDistinct ls
+            Nothing -> Nothing
+        where firstDistinct [] = Nothing
+              firstDistinct ((a,b):xs) | a /= b = Just (notAssumedConstraint a ded (taun 1 :: ClassicalSequentOver HOArithSumLex (Term Int)))
+                                       | otherwise = firstDistinct xs
     -- Fitch-style scope: induction's second premise is a subproof.
     globalRestriction (Left ded) n Induction =
         Just (notAssumedConstraint n ded (taun 1 :: ClassicalSequentOver HOArithSumLex (Term Int)))
@@ -217,7 +254,7 @@ instance Inference HOArithSumFL HOArithSumLex (Form Bool) where
         Just (notAssumedConstraint n ded (taun 1 :: ClassicalSequentOver HOArithSumLex (Term Int)))
     globalRestriction _ _ _ = Nothing
 
-    isAssumption As = True
+    isAssumption (TFL x) = isAssumption x
     isAssumption _  = False
     isPremise (Pr _) = True
     isPremise _      = False
@@ -241,42 +278,100 @@ polyEqConstraint sub =
 
 parseHOArithSumFL :: RuntimeDeductionConfig HOArithSumLex (Form Bool)
                   -> Parsec String u [HOArithSumFL]
-parseHOArithSumFL rtc = try parseExtra <|> liftFO
+parseHOArithSumFL rtc =
+        try parseArith <|> try premRule <|> try liftProp <|> try quantRule <|> eqReject
   where
-    -- Leibniz's law is renamed "EQ" in this system (parsed in parseExtra);
-    -- reject the first-order fragment's "LL" spelling with a pointer.
-    liftFO = do rs <- parseFOLogic defaultRuntimeDeductionConfig
-                if any (`elem` [LL1, LL2, ALL1, ALL2]) rs
-                    then unexpected "rule LL (it is named EQ in this system)"
-                    else return (map FO rs)
-    parseExtra = do
-        r <- choice (map (try . string)
-                ["PR", "AS", "Ind", "Poly", "ΣZ", "SumZ", "ΣS", "SumS", "EQ"
-                , "Def-U", "Def-I", "Def-C", "Def-P", "Def-S", "Def-=", "Def-\8709", "Def-{}"])
+    -- The propositional layer is parsed with the default config so that its
+    -- "PR" can't fire with propositional premises; ours is tried first.
+    liftProp = map TFL <$> P.parseFosterAndLaursenTFL defaultRuntimeDeductionConfig
+    premRule = string "PR" >> return [Pr (problemPremises rtc)]
+    -- Leibniz's law was called "EQ" in an earlier version of this system;
+    -- reject that spelling with a pointer to the current name.
+    eqReject = string "EQ" >> unexpected "rule EQ (it is named =E in this system)"
+    parseArith = do
+        r <- choice (map (try . string) ["Ind", "Poly", "ΣZ", "SumZ", "ΣS", "SumS", "Chain", "EQR"])
         return $ case r of
-            "PR"        -> [Pr (problemPremises rtc)]
-            "AS"        -> [As]
-            "Ind"       -> [Induction, InductionPlus]
-            "Poly"      -> [PolyEq]
-            "EQ"        -> map FO [LL1, LL2, ALL1, ALL2]
-            "ΣZ"        -> [SumZero]
-            "SumZ"      -> [SumZero]
-            "ΣS"        -> [SumSucc, SumPlus]
-            "SumS"      -> [SumSucc, SumPlus]
-            "Def-U"     -> [DefU1, DefU2]
-            "Def-I"     -> [DefI1, DefI2]
-            "Def-C"     -> [DefC1, DefC2, DefC3, DefC4]
-            "Def-S"     -> [DefSub1, DefSub2]
-            "Def-P"     -> [DefP1, DefP2]
-            "Def-="     -> [DefID1, DefID2, DefID3, DefID4]
-            "Def-\8709" -> [DefES1, DefES2, DefES3, DefES4]
-            _           -> [DefSep1, DefSep2, DefSep3, DefSep4]
+            "Ind"   -> [Induction, InductionPlus]
+            "Poly"  -> [PolyEq]
+            "Chain" -> map EqChain [1 .. maxEqChainLength]
+            "EQR"   -> [EqCong]
+            r | r `elem` ["ΣZ", "SumZ"] -> [SumZero]
+              | otherwise               -> [SumSucc, SumPlus]
+    quantRule = do
+        r <- choice (map (try . string) [ "∀I", "@I", "AI", "∀E", "@E", "AE"
+                                        , "∃I", "3I", "EI", "∃E", "3E", "EE"
+                                        , "=I", "=E", "CQ"])
+        return $ case r of
+            r | r `elem` ["∀I","@I","AI"] -> [UI]
+              | r `elem` ["∀E","@E","AE"] -> [UE]
+              | r `elem` ["∃I","3I","EI"] -> [EI]
+              | r `elem` ["∃E","3E","EE"] -> [EE1, EE2]
+              | r == "=I" -> [IDI]
+              | r == "=E" -> [IDE1, IDE2]
+              | otherwise -> [QN1, QN2, QN3, QN4]
+
+------------------------------------------------------------
+-- Ellipsis resolution
+------------------------------------------------------------
+
+-- | Proof lines may write "..." for the right-hand side of the previous
+-- line's equality, so that a calculation can be laid out as
+--
+--      x = y     :…
+--      ... = z   :…
+--      ... = v   :…
+--      x = v     :Chain 1,2,3
+--
+-- which stands for the lines @y = z@ and @z = v@.  The parser turns "..."
+-- into the placeholder term 'ellipsisTerm'; here we walk the deduction in
+-- order and replace it, in every position it occurs, with the right-hand
+-- side of the preceding line (itself already resolved).
+resolveEllipses :: [DeductionLine HOArithSumFL HOArithSumLex (Form Bool)]
+                -> [DeductionLine HOArithSumFL HOArithSumLex (Form Bool)]
+resolveEllipses = go Nothing
+  where
+    -- the carried value is the RHS of the previous line's equality, if the
+    -- previous line was an assertion of an equality
+    go _ [] = []
+    go prev (l@(AssertLine phi r d deps) : ls)
+        | not (hasEllipsis phi) = l : go (rhsOf phi) ls
+        | otherwise = case prev of
+            Just t  -> let phi' = substEllipsis t phi
+                       in AssertLine phi' r d deps : go (rhsOf phi') ls
+            Nothing -> ellipsisError d phi : go Nothing ls
+    go prev (l:ls) = l : go prev ls
+
+    ellipsisError d phi = PartialLine (Right phi) msg d
+        where msg = newErrorMessage
+                        (Message "\"...\" requires that the previous line be an equality")
+                        (newPos "" 1 1)
+
+-- All maximal term-subterms of a formula, and their subterms.
+subterms :: HOArithSumLang (Form Bool) -> [HOArithSumLang (Term Int)]
+subterms = toListOf (termChildren . cosmos)
+
+hasEllipsis :: HOArithSumLang (Form Bool) -> Bool
+hasEllipsis = any isEllipsisTerm . subterms
+
+substEllipsis :: HOArithSumLang (Term Int)
+              -> HOArithSumLang (Form Bool)
+              -> HOArithSumLang (Form Bool)
+substEllipsis t = over termChildren (transform (\x -> if isEllipsisTerm x then t else x))
+
+-- The right-hand side of a formula, when it is an equality.
+rhsOf :: HOArithSumLang (Form Bool) -> Maybe (HOArithSumLang (Term Int))
+rhsOf phi = snd <$> preview (binaryOpPrism eqPrism) phi
+    where eqPrism :: Control.Lens.Prism' (HOArithSumLang (Term Int -> Term Int -> Form Bool)) ()
+          eqPrism = _termEq
+
+termChildren :: Control.Lens.Traversal' (HOArithSumLang (Form Bool)) (HOArithSumLang (Term Int))
+termChildren = genChildren
 
 parseHOArithSumFLProof :: RuntimeDeductionConfig HOArithSumLex (Form Bool)
                        -> String
                        -> [DeductionLine HOArithSumFL HOArithSumLex (Form Bool)]
 parseHOArithSumFLProof rtc =
-    toDeductionFitch (parseHOArithSumFL rtc) hoArithSumParser
+    resolveEllipses . toDeductionFitch (parseHOArithSumFL rtc) hoArithSumEllipsisParser
 
 hoArithSumFLCalc :: NaturalDeductionCalc HOArithSumFL HOArithSumLex (Form Bool)
 hoArithSumFLCalc = mkNDCalc

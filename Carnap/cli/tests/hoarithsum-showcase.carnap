@@ -1,0 +1,245 @@
+-- Companion proofs for the HOArithSum showcase document
+-- (Carnap-Documentation/doc/HOArithSum_Showcase.md): every proof that
+-- appears there, one lemma per playground, so the document stays checkable.
+--
+-- Together the lemmas exercise every rule of hoArithSumFL: the TFL core
+-- (AS PR R ∧I ∧E ∨I ∨E →I →E ↔I ↔E ¬I ¬E IP X), the TFL derived rules
+-- (DS MT DNE DNI LEM DeM NBD BMT), the first-order layer (∀I ∀E ∃I ∃E CQ
+-- =I =E), and the arithmetic rules (Poly ΣZ ΣS Ind).
+
+logic hoArithSumFL
+
+--------------------------------------------------------------------------------
+-- TFL core rules
+--------------------------------------------------------------------------------
+
+lemma ConjRules: x=0 /\ y=1 |- y=1 /\ x=0
+begin
+x=0/\y=1 :PR
+x=0 :/\E 1
+y=1 :/\E 1
+y=1/\x=0 :/\I 3, 2
+end
+
+lemma CondRules: x=0 -> y=1, x=0 |- y=1
+begin
+x=0->y=1 :PR
+x=0 :PR
+y=1 :->E 1, 2
+end
+
+lemma CondIntroRule: |- x=0 -> x=0
+begin
+0=0 :=I
+   x=0 :AS
+   x=0 :R 2
+x=0->x=0 :->I 2-3
+end
+
+lemma DisjRules: x=0 \/ y=0 |- y=0 \/ x=0
+begin
+x=0\/y=0 :PR
+   x=0 :AS
+   y=0\/x=0 :\/I 2
+--
+   y=0 :AS
+   y=0\/x=0 :\/I 5
+y=0\/x=0 :\/E 1, 2-3, 5-6
+end
+
+lemma BicoElimRule: x=0 <-> y=0, x=0 |- y=0
+begin
+x=0<->y=0 :PR
+x=0 :PR
+y=0 :<->E 1, 2
+end
+
+lemma BicoIntroRule: x=0 <-> y=0 |- y=0 <-> x=0
+begin
+x=0<->y=0 :PR
+   y=0 :AS
+   x=0 :<->E 1, 2
+--
+   x=0 :AS
+   y=0 :<->E 1, 5
+y=0<->x=0 :<->I 2-3, 5-6
+end
+
+lemma NegIntroRule: x=0 -> _|_ |- ~(x=0)
+begin
+x=0->_|_ :PR
+   x=0 :AS
+   _|_ :->E 1, 2
+~(x=0) :~I 2-3
+end
+
+lemma Explosion: ~(x=0), x=0 |- y=5
+begin
+~(x=0) :PR
+x=0 :PR
+_|_ :~E 1, 2
+y=5 :X 3
+end
+
+lemma IndirectProof: ~(~(x=0)) |- x=0
+begin
+~(~(x=0)) :PR
+   ~(x=0) :AS
+   _|_ :~E 1, 2
+x=0 :IP 2-3
+end
+
+--------------------------------------------------------------------------------
+-- TFL derived rules
+--------------------------------------------------------------------------------
+
+lemma DisjSyllRule: x != 0, x=0 \/ x=1 |- x=1
+begin
+x!=0 :PR
+x=0\/x=1 :PR
+x=1 :DS 2, 1
+end
+
+lemma ModusTollensRule: x=0 -> y=0, ~(y=0) |- ~(x=0)
+begin
+x=0->y=0 :PR
+~(y=0) :PR
+~(x=0) :MT 1, 2
+end
+
+lemma DoubleNegRules: x=0 |- x=0
+begin
+x=0 :PR
+~(~(x=0)) :DNI 1
+x=0 :DNE 2
+end
+
+lemma LemRule: |- x=0 \/ ~(x=0)
+begin
+0=0 :=I
+   x=0 :AS
+   x=0\/~(x=0) :\/I 2
+--
+   ~(x=0) :AS
+   x=0\/~(x=0) :\/I 5
+x=0\/~(x=0) :LEM 2-3, 5-6
+end
+
+lemma DeMorganRule: ~(x=0 /\ y=0) |- ~(x=0) \/ ~(y=0)
+begin
+~(x=0/\y=0) :PR
+~(x=0)\/~(y=0) :DeM 1
+end
+
+lemma NegBicoRule: ~(x=0 <-> y=0) |- x=0 <-> ~(y=0)
+begin
+~(x=0<->y=0) :PR
+x=0<->~(y=0) :NBD 1
+end
+
+lemma BicoMTRule: x=0 <-> y=0, ~(x=0) |- ~(y=0)
+begin
+x=0<->y=0 :PR
+~(x=0) :PR
+~(y=0) :BMT 1, 2
+end
+
+--------------------------------------------------------------------------------
+-- First-order rules
+--------------------------------------------------------------------------------
+
+lemma UnivElimRule: Ax(x < x + 1) |- 3 < 3 + 1
+begin
+Ax(x < x+1) :PR
+3 < 3+1 :AE 1
+end
+
+lemma UnivIntroRule: Ax(f(x) = x) |- Ay(f(y) + 1 = y + 1)
+begin
+Ax(f(x)=x) :PR
+f(t)=t :AE 1
+f(t)+1 = f(t)+1 :=I
+f(t)+1 = t+1 :=E 2, 3
+Ay(f(y)+1 = y+1) :AI 4
+end
+
+lemma ExisRules: Ex(Prime(x)) |- Ey(Prime(y))
+begin
+Ex(Prime(x)) :PR
+   Prime(t) :AS
+   Ey(Prime(y)) :EI 2
+Ey(Prime(y)) :EE 1, 2-3
+end
+
+lemma QuantNegRule: ~Ax(x=0) |- Ex(~(x=0))
+begin
+~Ax(x=0) :PR
+Ex(~(x=0)) :CQ 1
+end
+
+lemma EqIntroRule: |- 2 + 2 = 2 + 2
+begin
+2+2 = 2+2 :=I
+end
+
+lemma EqElimRule: Prime(x), x = y |- Prime(y)
+begin
+x=y :PR
+Prime(x) :PR
+Prime(y) :=E 1, 2
+end
+
+--------------------------------------------------------------------------------
+-- Arithmetic rules
+--------------------------------------------------------------------------------
+
+lemma PolyRing: |- (x + y) * (x + y) = ((x*x) + ((x*y) + (y*x))) + (y*y)
+begin
+(x + y) * (x + y) = ((x*x) + ((x*y) + (y*x))) + (y*y) :Poly
+end
+
+lemma PolyNumerals: |- (2 + 3) * 2 = 10
+begin
+(2 + 3) * 2 = 10 :Poly
+end
+
+lemma PolySumOpaque: |- (Σx=0..n. x) + (Σx=0..n. x) = 2 * (Σx=0..n. x)
+begin
+(Σx=0..n. x) + (Σx=0..n. x) = 2 * (Σx=0..n. x) :Poly
+end
+
+lemma SigmaZeroRule: |- Σy=0..0. ((2*y)+1) = (2*0)+1
+begin
+Σy=0..0. ((2*y)+1) = (2*0)+1 :ΣZ
+end
+
+lemma SigmaStepRule: |- Σy=0..n+1. y = (Σy=0..n. y) + (n + 1)
+begin
+Σy=0..n+1. y = (Σy=0..n. y) + (n + 1) :ΣS
+end
+
+lemma IndMinimal: |- Ax(Σy=0..x. 0 = 0)
+begin
+Σy=0..0. 0 = 0 :ΣZ
+   Σy=0..t. 0 = 0 :AS
+   Σy=0..t+1. 0 = (Σy=0..t. 0) + 0 :ΣS
+   Σy=0..t+1. 0 = 0 + 0 :=E 2, 3
+   0 + 0 = 0 :Poly
+   Σy=0..t+1. 0 = 0 :=E 5, 4
+Ax(Σy=0..x. 0 = 0) :Ind 1, 2-6
+end
+
+lemma Triangular: |- Ax(2 * (Σy=0..x. y) = x * (x + 1))
+begin
+Σy=0..0. y = 0 :ΣZ
+2 * 0 = 0 * (0 + 1) :Poly
+2 * (Σy=0..0. y) = 0 * (0 + 1) :=E 1, 2
+   2 * (Σy=0..t. y) = t * (t + 1) :AS
+   Σy=0..t+1. y = (Σy=0..t. y) + (t + 1) :ΣS
+   2 * ((Σy=0..t. y) + (t + 1)) = (2 * (Σy=0..t. y)) + (2 * (t + 1)) :Poly
+   2 * (Σy=0..t+1. y) = (2 * (Σy=0..t. y)) + (2 * (t + 1)) :=E 5, 6
+   2 * (Σy=0..t+1. y) = (t * (t + 1)) + (2 * (t + 1)) :=E 4, 7
+   (t * (t + 1)) + (2 * (t + 1)) = (t + 1) * ((t + 1) + 1) :Poly
+   2 * (Σy=0..t+1. y) = (t + 1) * ((t + 1) + 1) :=E 9, 8
+Ax(2 * (Σy=0..x. y) = x * (x + 1)) :Ind 3, 4-10
+end

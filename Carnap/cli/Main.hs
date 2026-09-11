@@ -8,6 +8,7 @@ import System.IO (hPutStrLn, stderr)
 import Control.Applicative ((<|>))
 import Control.Monad (foldM)
 import Data.Char (isSpace)
+import Data.List (dropWhileEnd)
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef')
 import Data.Maybe (fromMaybe)
 import Text.Parsec (parse, eof)
@@ -251,7 +252,11 @@ runCheck :: ( SupportsND r lex sem
          -> NaturalDeductionCalc r lex sem
          -> IO LemmaOutcome
 runCheck name sys mgoal proof calc = do
-    let trimmedProof = strip proof
+    -- Drop blank lines fore and aft, but preserve indentation: the first
+    -- line of a proof may legitimately be indented (e.g. a proof that
+    -- opens with a subproof).
+    let trimmedProof = unlines . dropWhileEnd blank . dropWhile blank . lines $ proof
+        blank = all isSpace
         ded = ndParseProof calc defaultRuntimeDeductionConfig trimmedProof
         Feedback mseq ds = toDisplaySequence (ndProcessLine calc) ded
         errors = concatMap reportError (zip [1..] ds)

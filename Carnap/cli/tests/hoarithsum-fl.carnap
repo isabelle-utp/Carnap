@@ -75,6 +75,103 @@ begin
 end
 
 --------------------------------------------------------------------------------
+-- Equation chaining
+--------------------------------------------------------------------------------
+
+-- A chain cites a list of equality lines directly (no subproof): each
+-- cited line is one individually-justified link τi = τ(i+1), and the rule
+-- concludes the equality between the chain's first and last terms.
+
+-- Plain transitivity: a two-link chain over the premises.
+lemma ChainTwo: x = y, y = z |- x = z
+begin
+x=y :PR
+y=z :PR
+x=z :Chain 1,2
+end
+
+-- A three-link chain; the middle terms must match up exactly.
+lemma ChainThree: t = s, s = u, u = v |- t = v
+begin
+t=s :PR
+s=u :PR
+u=v :PR
+t=v :Chain 1,2,3
+end
+
+-- Chaining calculation steps produced by Poly.
+lemma ChainCalc: |- (2 + 3) * 2 = 10
+begin
+(2+3)*2 = 5*2 :Poly
+5*2 = 10 :Poly
+(2+3)*2 = 10 :Chain 1,2
+end
+
+--------------------------------------------------------------------------------
+-- Ellipsis notation
+--------------------------------------------------------------------------------
+
+-- "..." abbreviates the RHS of the previous line's equality, so a chain of
+-- calculation steps can be laid out without repeating the middle terms.
+lemma EllipsisChain: x = y, y = z, z = v |- x = v
+begin
+x=y :PR
+... = z :PR
+... = v :PR
+x=v :Chain 1,2,3
+end
+
+-- The same layout over Poly steps.
+lemma EllipsisCalc: |- (2 + 3) * 2 = 10
+begin
+(2+3)*2 = 5*2 :Poly
+... = 10 :Poly
+(2+3)*2 = 10 :Chain 1,2
+end
+
+-- The ellipsis is a term, so it can sit inside a larger term.
+lemma EllipsisInTerm: |- 5 + 1 = 6
+begin
+2 + 3 = 5 :Poly
+... + 1 = 6 :Poly
+end
+
+--------------------------------------------------------------------------------
+-- Congruence
+--------------------------------------------------------------------------------
+
+-- EQR lets an equality be applied inside an arbitrary term context: from
+-- τ = σ it concludes θ(τ) = θ(σ) for any term θ with a hole.
+
+-- A function symbol as the context.
+lemma CongFun: x = y |- f(x) = f(y)
+begin
+x=y :PR
+f(x)=f(y) :EQR 1
+end
+
+-- An arithmetic context.
+lemma CongPlus: x = y |- x + 1 = y + 1
+begin
+x=y :PR
+x+1=y+1 :EQR 1
+end
+
+-- The hole may occur more than once.
+lemma CongSquare: x = y |- x * x = y * y
+begin
+x=y :PR
+x*x=y*y :EQR 1
+end
+
+-- A nested context.
+lemma CongNested: x = y |- f(g(x) + 2) = f(g(y) + 2)
+begin
+x=y :PR
+f(g(x)+2)=f(g(y)+2) :EQR 1
+end
+
+--------------------------------------------------------------------------------
 -- Induction
 --------------------------------------------------------------------------------
 
@@ -85,9 +182,9 @@ begin
 Σy=0..0. 0 = 0 :ΣZ
    Σy=0..t. 0 = 0 :AS
    Σy=0..t'. 0 = (Σy=0..t. 0) + 0 :ΣS
-   Σy=0..t'. 0 = 0 + 0 :EQ 2, 3
+   Σy=0..t'. 0 = 0 + 0 :=E 2, 3
    0 + 0 = 0 :Poly
-   Σy=0..t'. 0 = 0 :EQ 5, 4
+   Σy=0..t'. 0 = 0 :=E 5, 4
 Ax(Σy=0..x. 0 = 0) :Ind 1, 2-6
 end
 
@@ -98,8 +195,8 @@ begin
 Σy=0..0. 0 = 0 :ΣZ
    Σy=0..t. 0 = 0 :AS
    Σy=0..t+1. 0 = (Σy=0..t. 0) + 0 :ΣS
-   Σy=0..t+1. 0 = 0 + 0 :EQ 2, 3
+   Σy=0..t+1. 0 = 0 + 0 :=E 2, 3
    0 + 0 = 0 :Poly
-   Σy=0..t+1. 0 = 0 :EQ 5, 4
+   Σy=0..t+1. 0 = 0 :=E 5, 4
 Ax(Σy=0..x. 0 = 0) :Ind 1, 2-6
 end
