@@ -140,7 +140,7 @@ parseExponentSugar = do
     let n = read ds :: Int
     if n < 1 
       then fail "Exponent must be a positive integer"
-      else return (\t -> foldr1 arithMult (replicate n t))
+      else return (\t -> foldr1 arithTimes (replicate n t))
 
 hoArithSumOpParser :: Monad m
     => ParsecT String u m (HOArithSumLang (Term Int))
