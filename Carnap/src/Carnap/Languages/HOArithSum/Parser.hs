@@ -80,16 +80,31 @@ isEllipsisTerm t = t =* ellipsisTerm
 parseEllipsis :: Monad m => ParsecT String u m (HOArithSumLang (Term Int))
 parseEllipsis = string "..." >> spaces >> return ellipsisTerm
 
+-- Base atomic terms (no unparenthesized binary operators)
+parseAtomicTerm :: (Monad m, ElementaryArithmeticLanguage (HOArithSumLang (Term Int)))
+                => ParsecT String u m (HOArithSumLang (Term Int))
+                -> ParsecT String u m (HOArithSumLang (Term Int))
+parseAtomicTerm recurTerm = 
+        wrappedWith '(' ')' recurTerm
+    <|> wrappedWith '[' ']' recurTerm
+    <|> try parseNumeral
+    <|> vparser
+    <|> cparser
+  where
+    vparser = parseFreeVar "stuvwxyz"
+    cparser = parseConstant "abcdefghijklmnopqr"
+
+-- Full term parser with precedence table
+parseArithTerm :: Parsec String u (HOArithSumLang (Term Int))
+parseArithTerm = hoArithSumOpParser (parseAtomicTerm parseArithTerm)
+
 -- | The shared option set, parameterized by whether @...@ is a legal term.
 -- It is legal only in proof lines, not in lemma statements or goals.
 hoArithSumOptionsWith :: Bool -> FirstOrderParserOptions HOArithSumLex u Identity
 hoArithSumOptionsWith allowEllipsis = opts
   where
     opts = FirstOrderParserOptions
-        { atomicSentenceParser = \x -> try (equalsParser x)
-                                       <|> try (lessThanParser x)
-                                       <|> try (inequalityParser x)
-                                       <|> parsePredicateString extendedSymbols x
+        { atomicSentenceParser = \_ -> atomicArithSentence
         , quantifiedSentenceParser' = quantifiedSentenceParser
         , freeVarParser = parseFreeVar "stuvwxyz"
         , constantParser = Just (ellipsisParser
@@ -102,8 +117,18 @@ hoArithSumOptionsWith allowEllipsis = opts
         , finalValidation = const (pure ())
         }
 
-    -- Base terms that do NOT directly call hoArithSumOpParser.
-    -- Parentheses explicitly restart 'tparser' so (x + y) * z works.
+    -- Force equality and relational operators to parse both sides with parseArithTerm
+    atomicArithSentence = try (binaryOp "=" arithEquals parseArithTerm)
+                      <|> try (binaryOp "<" arithLessThan parseArithTerm)
+                      <|> try (binaryOp "/=" arithInequality parseArithTerm)
+                      <|> parsePredicateString extendedSymbols tparser
+
+    binaryOp sym cons termP = do
+        l <- termP
+        spaces >> string sym >> spaces
+        r <- termP
+        return (cons l r)
+
     atomicTerm = parenParser tparser
              <|> try parseNumeral
              <|> try (parseFunctionString extendedSymbols tparser)
@@ -115,7 +140,7 @@ hoArithSumOptionsWith allowEllipsis = opts
     cparser = case constantParser opts of Just c -> c
     fparser = case functionParser opts of Just f -> f
     vparser = freeVarParser opts
-    tparser = try (fparser tparser) <|> try cparser <|> vparser
+    tparser = parseArithTerm
     parenOrBracket opt rw = (wrappedWith '(' ')' (rw opt) <|> wrappedWith '[' ']' (rw opt))
 
 hoArithSumOptions :: FirstOrderParserOptions HOArithSumLex u Identity
