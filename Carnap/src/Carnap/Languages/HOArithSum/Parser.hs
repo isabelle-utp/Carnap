@@ -131,10 +131,24 @@ hoArithSumMontagueParser = parserFromOptions hoArithSumOptions { hasBooleanConst
 instance ParsableLex (Form Bool) HOArithSumLex where
     langParser = hoArithSumParser
 
+parseExponentSugar :: Monad m => ParsecT String u m (HOArithSumLang (Term Int) -> HOArithSumLang (Term Int))
+parseExponentSugar = do
+    _ <- char '^'
+    spaces
+    ds <- many1 digit
+    spaces
+    let n = read ds :: Int
+    if n < 1 
+      then fail "Exponent must be a positive integer"
+      else return (\t -> foldr1 arithMult (replicate n t))
+
 hoArithSumOpParser :: Monad m
     => ParsecT String u m (HOArithSumLang (Term Int))
     -> ParsecT String u m (HOArithSumLang (Term Int))
 hoArithSumOpParser subTerm = buildExpressionParser opTable subTerm
-    where opTable = [ [Postfix (try (iteratedParse parseSucc))]
-                    , [Infix (try parsePlus) AssocLeft, Infix (try parseTimes) AssocLeft]
+    where opTable = [ [ Postfix (try (iteratedParse parseSucc))
+                      , Postfix (try parseExponentSugar)
+                      ]
+                    , [Infix (try parseTimes) AssocLeft]
+                    , [Infix (try parsePlus) AssocLeft]
                     ]
