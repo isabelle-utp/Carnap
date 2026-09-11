@@ -95,18 +95,21 @@ hoArithSumOptionsWith allowEllipsis = opts
         , constantParser = Just (ellipsisParser
                                   <|> parseConstant "abcdefghijklmnopqr"
                                   <|> sumParser vparser tparser)
-        , functionParser = Just (\x -> hoArithSumOpParser
-                                           (parenParser x
-                                            <|> try parseNumeral
-                                            <|> try (parseFunctionString extendedSymbols x)
-                                            <|> vparser
-                                            <|> cparser
-                                            ))
+        , functionParser = Just (\_ -> hoArithSumOpParser atomicTerm)
         , hasBooleanConstants = True
         , parenRecur = parenOrBracket
         , opTable = standardOpTable
         , finalValidation = const (pure ())
         }
+
+    -- Base terms that do NOT directly call hoArithSumOpParser.
+    -- Parentheses explicitly restart 'tparser' so (x + y) * z works.
+    atomicTerm = parenParser tparser
+             <|> try parseNumeral
+             <|> try (parseFunctionString extendedSymbols tparser)
+             <|> vparser
+             <|> cparser
+
     ellipsisParser | allowEllipsis = try parseEllipsis
                    | otherwise     = parserZero
     cparser = case constantParser opts of Just c -> c
