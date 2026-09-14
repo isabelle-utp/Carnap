@@ -83,7 +83,8 @@ parseEllipsis = string "..." >> spaces >> return ellipsisTerm
 -- Base atomic terms (no unparenthesized binary operators)
 parseAtomicTerm :: Parsec String u (HOArithSumLang (Term Int))
                 -> Parsec String u (HOArithSumLang (Term Int))
-parseAtomicTerm recurTerm = 
+                -> Parsec String u (HOArithSumLang (Term Int))
+parseAtomicTerm cparser recurTerm = 
         wrappedWith '(' ')' recurTerm
     <|> wrappedWith '[' ']' recurTerm
     <|> try parseNumeral
@@ -91,11 +92,11 @@ parseAtomicTerm recurTerm =
     <|> cparser
   where
     vparser = parseFreeVar "stuvwxyz"
-    cparser = parseConstant "abcdefghijklmnopqr"
 
 -- Full term parser with precedence table
 parseArithTerm :: Parsec String u (HOArithSumLang (Term Int))
-parseArithTerm = hoArithSumOpParser (parseAtomicTerm parseArithTerm)
+               -> Parsec String u (HOArithSumLang (Term Int))
+parseArithTerm cparser = hoArithSumOpParser (parseAtomicTerm cparser (parseArithTerm cparser))
 
 -- | The shared option set, parameterized by whether @...@ is a legal term.
 -- It is legal only in proof lines, not in lemma statements or goals.
@@ -133,7 +134,7 @@ hoArithSumOptionsWith allowEllipsis = opts
     cparser = case constantParser opts of Just c -> c
     fparser = case functionParser opts of Just f -> f
     vparser = freeVarParser opts
-    tparser = parseArithTerm
+    tparser = parseArithTerm cparser
     parenOrBracket opt rw = (wrappedWith '(' ')' (rw opt) <|> wrappedWith '[' ']' (rw opt))
 
 hoArithSumOptions :: FirstOrderParserOptions HOArithSumLex u Identity
