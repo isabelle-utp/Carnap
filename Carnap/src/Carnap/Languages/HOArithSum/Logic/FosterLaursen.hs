@@ -22,6 +22,7 @@ import Carnap.Languages.ClassicalSequent.Parser
 import Carnap.Calculi.Util
 import Carnap.Calculi.NaturalDeduction.Syntax
 import Carnap.Calculi.NaturalDeduction.Parser
+import Carnap.Calculi.NaturalDeduction.Parser.Util (parseIntsAndSpans)
 import Carnap.Calculi.NaturalDeduction.Checker (hoProcessLineFitch, hoProcessLineFitchMemo)
 import Carnap.Languages.Util.LanguageClasses
 import Carnap.Core.Data.Optics (binaryOpPrism, genChildren)
@@ -279,24 +280,20 @@ polyEqConstraint sub =
 parseHOArithSumFL :: RuntimeDeductionConfig HOArithSumLex (Form Bool)
                   -> Parsec String u [HOArithSumFL]
 parseHOArithSumFL rtc =
-        try parseArith <|> try premRule <|> try liftProp <|> try quantRule <|> eqReject
+        try premRule 
+    <|> try parseArith 
+    <|> try quantRule 
+    <|> try liftProp 
+    <|> eqReject
   where
-    -- The propositional layer is parsed with the default config so that its
-    -- "PR" can't fire with propositional premises; ours is tried first.
-    liftProp = map TFL <$> P.parseFosterAndLaursenTFL defaultRuntimeDeductionConfig
     premRule = string "PR" >> return [Pr (problemPremises rtc)]
-    -- Leibniz's law was called "EQ" in an earlier version of this system;
-    -- reject that spelling with a pointer to the current name.
+    
     eqReject = string "EQ" >> unexpected "rule EQ (it is named =E in this system)"
-    parseArith = do
-        r <- choice (map (try . string) ["Ind", "Poly", "ΣZ", "SumZ", "ΣS", "SumS", "Chain", "EQR"])
-        return $ case r of
-            "Ind"   -> [Induction, InductionPlus]
-            "Poly"  -> [PolyEq]
-            "Chain" -> map EqChain [1 .. maxEqChainLength]
-            "EQR"   -> [EqCong]
-            r | r `elem` ["ΣZ", "SumZ"] -> [SumZero]
-              | otherwise               -> [SumSucc, SumPlus]
+
+    -- Standard Propositional & First-Order rules from TFL
+    liftProp = map TFL <$> P.parseFosterAndLaursenTFL defaultRuntimeDeductionConfig
+
+    -- Quantifier & Identity Rules
     quantRule = do
         r <- choice (map (try . string) [ "∀I", "@I", "AI", "∀E", "@E", "AE"
                                         , "∃I", "3I", "EI", "∃E", "3E", "EE"
@@ -306,9 +303,41 @@ parseHOArithSumFL rtc =
               | r `elem` ["∀E","@E","AE"] -> [UE]
               | r `elem` ["∃I","3I","EI"] -> [EI]
               | r `elem` ["∃E","3E","EE"] -> [EE1, EE2]
-              | r == "=I" -> [IDI]
-              | r == "=E" -> [IDE1, IDE2]
-              | otherwise -> [QN1, QN2, QN3, QN4]
+              | r == "=I"                 -> [IDI]
+              | r == "=E"                 -> [IDE1, IDE2]
+              | otherwise                 -> [QN1, QN2, QN3, QN4]
+
+    -- Arithmetic & Chain Rules (Supports m-n and m..n)
+    parseArith = do
+        r <- choice (map (try . string) ["Ind", "Poly", "ΣZ", "SumZ", "ΣS", "SumS", "Chain", "EQR"])
+        case r of
+            "Chain" -> parseChainRule
+            "Ind"   -> return [Induction, InductionPlus]
+            "Poly"  -> return [PolyEq]
+            "EQR"   -> return [EqCong]
+            r | r `elem` ["ΣZ", "SumZ"] -> return [SumZero]
+              | otherwise               -> return [SumSucc, SumPlus]
+
+    parseChainRule = do
+        mbRange <- optionMaybe (try parseChainRange <|> parseExplicitList)
+        case mbRange of
+            Just lines -> return [EqChain (length lines)]
+            Nothing    -> return (map EqChain [1 .. maxEqChainLength])
+
+    -- Parses both m-n and m..n into [m..n]
+    parseChainRange = do
+        spaces
+        m <- read <$> many1 digit
+        _ <- string "-"
+        n <- read <$> many1 digit
+        if n >= m
+            then return [m .. n]
+            else fail "Range start must be <= range end"
+
+    parseExplicitList = do
+        spaces
+        spans <- parseIntsAndSpans
+        return $ concatMap (\(a, b) -> [a .. b]) spans
 
 ------------------------------------------------------------
 -- Ellipsis resolution
