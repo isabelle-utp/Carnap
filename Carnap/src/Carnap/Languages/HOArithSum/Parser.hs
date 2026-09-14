@@ -155,7 +155,7 @@ hoArithSumMontagueParser :: Parsec String u (HOArithSumLang (Form Bool))
 hoArithSumMontagueParser = parserFromOptions hoArithSumOptions { hasBooleanConstants = False }
 
 instance ParsableLex (Form Bool) HOArithSumLex where
-    langParser = hoArithSumParser
+    langParser = hoArithSumEllipsisParser
 
 parseExponentSugar :: Monad m => ParsecT String u m (HOArithSumLang (Term Int) -> HOArithSumLang (Term Int))
 parseExponentSugar = do
