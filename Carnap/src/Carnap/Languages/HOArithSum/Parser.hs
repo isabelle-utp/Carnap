@@ -108,7 +108,7 @@ hoArithSumOptionsWith allowEllipsis = opts
         , quantifiedSentenceParser' = quantifiedSentenceParser
         , freeVarParser = parseFreeVar "stuvwxyz"
         , constantParser = Just (baseConstantParser <|> sumParser vparser tparser)
-        , functionParser = Just (\_ -> hoArithSumOpParser atomicTerm)
+        , functionParser = Just (\_ -> parseFunctionString extendedSymbols tparser)
         , hasBooleanConstants = True
         , parenRecur = parenOrBracket
         , opTable = standardOpTable
@@ -118,24 +118,25 @@ hoArithSumOptionsWith allowEllipsis = opts
     -- Base constants that do NOT depend on tparser
     baseConstantParser = ellipsisParser <|> parseConstant "abcdefghijklmnopqr"
 
-    -- Force equality and relational operators to parse both sides with parseArithTerm
     atomicArithSentence = try (equalsParser tparser)
                       <|> try (lessThanParser tparser)
                       <|> try (inequalityParser tparser)
                       <|> parsePredicateString extendedSymbols tparser
 
+    -- MUST check parseFunctionString BEFORE baseConstantParser / cparserForTerms
     atomicTerm = parenParser tparser
              <|> try parseNumeral
              <|> try (parseFunctionString extendedSymbols tparser)
              <|> vparser
-             <|> cparser
+             <|> cparserForTerms
 
     ellipsisParser | allowEllipsis = try parseEllipsis
                    | otherwise     = parserZero
 
-    -- Use baseConstantParser directly for term parsing to prevent circular loops
-    cparser = baseConstantParser <|> sumParser vparser tparser
-    cparserForTerms = baseConstantParser
+    -- Updated cparserForTerms to try function strings before bare constants
+    cparserForTerms = try (parseFunctionString extendedSymbols tparser)
+                  <|> baseConstantParser 
+                  <|> sumParser vparser tparser
 
     vparser = freeVarParser opts
     tparser = parseArithTerm cparserForTerms
