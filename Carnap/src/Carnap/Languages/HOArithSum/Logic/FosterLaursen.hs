@@ -207,7 +207,7 @@ instance Inference HOArithSumFL HOArithSumLex (Form Bool) where
     indirectInference (TFL x) = indirectInference x
     indirectInference Induction     = Just assumptiveProof
     indirectInference InductionPlus = Just assumptiveProof
-    indirectInference (EqChain n)  = Just (TypedProof (ProofType 0 n))
+    indirectInference (EqChain n) = Just (PolyTypedProof n (ProofType 0 1))
     indirectInference x
         | x `elem` [EE1, EE2] = Just assumptiveProof
         | otherwise = Nothing
