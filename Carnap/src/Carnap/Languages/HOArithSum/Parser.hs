@@ -107,15 +107,16 @@ hoArithSumOptionsWith allowEllipsis = opts
         { atomicSentenceParser = \_ -> atomicArithSentence
         , quantifiedSentenceParser' = quantifiedSentenceParser
         , freeVarParser = parseFreeVar "stuvwxyz"
-        , constantParser = Just (ellipsisParser
-                                  <|> parseConstant "abcdefghijklmnopqr"
-                                  <|> sumParser vparser tparser)
+        , constantParser = Just (baseConstantParser <|> sumParser vparser tparser)
         , functionParser = Just (\_ -> hoArithSumOpParser atomicTerm)
         , hasBooleanConstants = True
         , parenRecur = parenOrBracket
         , opTable = standardOpTable
         , finalValidation = const (pure ())
         }
+
+    -- Base constants that do NOT depend on tparser
+    baseConstantParser = ellipsisParser <|> parseConstant "abcdefghijklmnopqr"
 
     -- Force equality and relational operators to parse both sides with parseArithTerm
     atomicArithSentence = try (equalsParser (parseArithTerm cparser))
@@ -131,10 +132,13 @@ hoArithSumOptionsWith allowEllipsis = opts
 
     ellipsisParser | allowEllipsis = try parseEllipsis
                    | otherwise     = parserZero
-    cparser = case constantParser opts of Just c -> c
-    fparser = case functionParser opts of Just f -> f
+
+    -- Use baseConstantParser directly for term parsing to prevent circular loops
+    cparser = baseConstantParser <|> sumParser vparser tparser
+    cparserForTerms = baseConstantParser
+
     vparser = freeVarParser opts
-    tparser = parseArithTerm cparser
+    tparser = parseArithTerm cparserForTerms
     parenOrBracket opt rw = (wrappedWith '(' ')' (rw opt) <|> wrappedWith '[' ']' (rw opt))
 
 hoArithSumOptions :: FirstOrderParserOptions HOArithSumLex u Identity
