@@ -98,9 +98,24 @@ polyLt p q =
         constTerm = M.findWithDefault 0 [] diff
     in isLinear diff && constTerm <= -1 && all (<= 0) (M.elems varCoeffs)
 
--- Checks whether two linear polynomials are not equal (i.e., one is strictly less than the other).
+-- Checks whether two linear polynomials can never be equal over non-negative integers.
+-- It checks:
+-- 1. If p < q or q < p holds for all natural numbers.
+-- 2. If the linear Diophantine equation (p - q = 0) has no integer solutions (GCD parity check).
 polyNeq :: Polynomial -> Polynomial -> Bool
-polyNeq p q = polyLt p q || polyLt q p
+polyNeq p q = polyLt p q || polyLt q p || diophantineUnsatisfiable diff
+  where
+    diff = polyAdd p (polyMul (polyConst (-1)) q)
+
+    diophantineUnsatisfiable :: Polynomial -> Bool
+    diophantineUnsatisfiable poly
+        | not (isLinear poly) = False
+        | null varCoeffs      = constTerm /= 0  -- Non-zero constant (e.g., 0 != 3)
+        | otherwise           = let g = foldl1 gcd varCoeffs
+                                in g /= 0 && (constTerm `rem` g /= 0)
+      where
+        varCoeffs = M.elems (M.delete [] poly)
+        constTerm = M.findWithDefault 0 [] poly
 
 -- | Returns 'Nothing' if the two terms are polynomial-equal under the
 -- 'opaque indeterminate' interpretation; otherwise an error string.
@@ -142,5 +157,5 @@ decidePolyNeq ::
     => FixLang lex (Term b) -> FixLang lex (Term b) -> Maybe String
 decidePolyNeq lhs rhs
     | polyNeq (polyNormalize lhs) (polyNormalize rhs) = Nothing
-    | otherwise = Just $ "the terms " ++ show lhs ++ " and " ++ show rhs
-                         ++ " are identically equal"
+    | otherwise = Just $ "cannot prove that " ++ show lhs ++ " ≠ " ++ show rhs
+                         ++ " holds for all natural numbers"
