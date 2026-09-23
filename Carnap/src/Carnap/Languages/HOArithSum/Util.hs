@@ -28,6 +28,10 @@ canonMono = filter ((/= 0) . snd) . M.toList . M.fromListWith (+)
 mulMono :: Monomial -> Monomial -> Monomial
 mulMono a b = canonMono (a ++ b)
 
+-- A monomial degree is the sum of its variable exponents.
+monoDegree :: Monomial -> Int
+monoDegree = sum . map snd
+
 polyClean :: Polynomial -> Polynomial
 polyClean = M.filter (/= 0)
 
@@ -54,6 +58,10 @@ polyMul p q = polyClean . M.fromListWith (+) $
     , (m2, c2) <- M.toList q
     ]
 
+-- Returns True if the polynomial is linear (all monomial degrees <= 1).
+isLinear :: Polynomial -> Bool
+isLinear = all (\(m, _) -> monoDegree m <= 1) . M.toList
+
 -- | Normalize an arithmetic term into a polynomial.
 --
 -- Recognizes 0, Suc(_), (_+_), (_*_); any other shape becomes a single
@@ -71,6 +79,29 @@ polyNormalize t
 polyEq :: Polynomial -> Polynomial -> Bool
 polyEq p q = polyClean p == polyClean q
 
+-- Checks whether p ≤ q holds for all non-negative natural number variables.
+-- A linear difference (P - Q) satisfies (P - Q) ≤ 0 iff all variable 
+-- coefficients and the constant term are non-positive.
+polyLeq :: Polynomial -> Polynomial -> Bool
+polyLeq p q = 
+    let diff = polyAdd p (polyMul (polyConst (-1)) q)
+        varCoeffs = M.delete [] diff
+        constTerm = M.findWithDefault 0 [] diff
+    in isLinear diff && constTerm <= 0 && all (<= 0) (M.elems varCoeffs)
+
+-- Checks whether p < q holds for all non-negative natural number variables.
+-- Equivalent to (P - Q) ≤ -1 over integers/naturals.
+polyLt :: Polynomial -> Polynomial -> Bool
+polyLt p q = 
+    let diff = polyAdd p (polyMul (polyConst (-1)) q)
+        varCoeffs = M.delete [] diff
+        constTerm = M.findWithDefault 0 [] diff
+    in isLinear diff && constTerm <= -1 && all (<= 0) (M.elems varCoeffs)
+
+-- Checks whether two linear polynomials are not equal (i.e., one is strictly less than the other).
+polyNeq :: Polynomial -> Polynomial -> Bool
+polyNeq p q = polyLt p q || polyLt q p
+
 -- | Returns 'Nothing' if the two terms are polynomial-equal under the
 -- 'opaque indeterminate' interpretation; otherwise an error string.
 decidePolyEq ::
@@ -80,3 +111,36 @@ decidePolyEq lhs rhs
     | polyEq (polyNormalize lhs) (polyNormalize rhs) = Nothing
     | otherwise = Just $ "the equation " ++ show lhs ++ " = " ++ show rhs
                          ++ " is not a polynomial identity"
+
+-- Decision procedure wrapper for less-than-or-equal (≤).
+decidePolyLeq ::
+    (PrismElementaryArithmeticLex lex b, Show (FixLang lex (Term b)))
+    => FixLang lex (Term b) -> FixLang lex (Term b) -> Maybe String
+decidePolyLeq lhs rhs
+    | not (isLinear (polyNormalize lhs) && isLinear (polyNormalize rhs)) = 
+        Just $ "cannot decide non-linear term inequality dynamically: " 
+             ++ show lhs ++ " ≤ " ++ show rhs
+    | polyLeq (polyNormalize lhs) (polyNormalize rhs) = Nothing
+    | otherwise = Just $ "inequality " ++ show lhs ++ " ≤ " ++ show rhs 
+                         ++ " does not hold for all natural numbers"
+
+-- Decision procedure wrapper for strict less-than (<).
+decidePolyLt ::
+    (PrismElementaryArithmeticLex lex b, Show (FixLang lex (Term b)))
+    => FixLang lex (Term b) -> FixLang lex (Term b) -> Maybe String
+decidePolyLt lhs rhs
+    | not (isLinear (polyNormalize lhs) && isLinear (polyNormalize rhs)) = 
+        Just $ "cannot decide non-linear term inequality dynamically: " 
+             ++ show lhs ++ " < " ++ show rhs
+    | polyLt (polyNormalize lhs) (polyNormalize rhs) = Nothing
+    | otherwise = Just $ "strict inequality " ++ show lhs ++ " < " ++ show rhs 
+                         ++ " does not hold for all natural numbers"
+
+-- Decision procedure wrapper for non-equality (≠).
+decidePolyNeq ::
+    (PrismElementaryArithmeticLex lex b, Show (FixLang lex (Term b)))
+    => FixLang lex (Term b) -> FixLang lex (Term b) -> Maybe String
+decidePolyNeq lhs rhs
+    | polyNeq (polyNormalize lhs) (polyNormalize rhs) = Nothing
+    | otherwise = Just $ "the terms " ++ show lhs ++ " and " ++ show rhs
+                         ++ " are identically equal"
