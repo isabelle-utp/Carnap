@@ -12,7 +12,7 @@ import Carnap.Core.Data.Types
 import Carnap.Core.Unification.Unification (applySub)
 import Carnap.Languages.HOArithSum.Syntax
 import Carnap.Languages.HOArithSum.Parser
-import Carnap.Languages.HOArithSum.Util (decidePolyEq, decidePolyLt)
+import Carnap.Languages.HOArithSum.Util (decidePolyEq, decidePolyLt, decidePolyNeq)
 import Carnap.Languages.PureFirstOrder.Syntax (fogamma)
 import Carnap.Languages.PureFirstOrder.Logic.Rules
 import qualified Carnap.Languages.PurePropositional.Logic.FosterAndLaursen as P
@@ -24,7 +24,7 @@ import Carnap.Calculi.NaturalDeduction.Syntax
 import Carnap.Calculi.NaturalDeduction.Parser
 import Carnap.Calculi.NaturalDeduction.Checker (hoProcessLineFitch, hoProcessLineFitchMemo)
 import Carnap.Languages.Util.LanguageClasses
-import Carnap.Core.Data.Optics (binaryOpPrism, genChildren)
+import Carnap.Core.Data.Optics (unaryOpPrism,binaryOpPrism, genChildren)
 import qualified Control.Lens
 import Control.Lens (preview, over, toListOf, transform, cosmos)
 
@@ -50,6 +50,7 @@ data HOArithSumFL
     | Induction | InductionPlus
     | PolyEq
     | PolyLt
+    | PolyNeq
     | SumZero
     | SumSucc | SumPlus
     -- premise
@@ -71,6 +72,7 @@ instance Show HOArithSumFL where
     show Induction = "Ind"; show InductionPlus = "Ind"
     show PolyEq    = "PolyEq"
     show PolyLt    = "PolyLt"
+    show PolyNeq   = "PolyNeq"
     show SumZero   = "ΣZ"
     show SumSucc   = "ΣS"; show SumPlus = "ΣS"
     show (Pr _)    = "PR"
@@ -107,6 +109,9 @@ polyEqRule = [] ∴ Top :|-: SS (tau `equals` tau')
 
 polyLtRule :: SequentRule HOArithSumLex (Form Bool)
 polyLtRule = [] ∴ Top :|-: SS (tau `lessThan` tau')
+
+polyNeqRule :: SequentRule HOArithSumLex (Form Bool)
+polyNeqRule = [] ∴ Top :|-: SS (lneg (tau `equals` tau'))
 
 -- Σi=0..0. θ(i)  =  θ(0)
 sumZeroRule :: SequentRule HOArithSumLex (Form Bool)
@@ -199,6 +204,7 @@ instance Inference HOArithSumFL HOArithSumLex (Form Bool) where
     ruleOf InductionPlus = inductionPlusRule
     ruleOf PolyEq    = polyEqRule
     ruleOf PolyLt    = polyLtRule
+    ruleOf PolyNeq   = polyNeqRule
     ruleOf SumZero   = sumZeroRule
     ruleOf SumSucc   = sumSuccRule
     ruleOf SumPlus   = sumPlusRule
@@ -229,6 +235,7 @@ instance Inference HOArithSumFL HOArithSumLex (Form Bool) where
         where stau = liftToSequent tau
     restriction PolyEq      = Just polyEqConstraint
     restriction PolyLt      = Just polyLtConstraint
+    restriction PolyNeq     = Just polyNeqConstraint
     restriction _           = Nothing
 
     globalRestriction (Left ded) n (TFL (P.Core P.CondIntro1)) = Just $ fitchAssumptionCheck n ded [([phin 1], [phin 2])]
@@ -289,6 +296,22 @@ polyLtConstraint sub =
     ltPrism :: Control.Lens.Prism' (ClassicalSequentOver HOArithSumLex (Term Int -> Term Int -> Form Bool)) ()
     ltPrism = _termLessThan
 
+polyNeqConstraint sub =
+    case preview neqPrism (applySub sub conc) of
+        Just (l, r) -> decidePolyNeq l r
+        Nothing     -> Just $ "PolyNeq applies only to non-equalities; got: " ++ show (applySub sub conc)
+  where
+    conc :: ClassicalSequentOver HOArithSumLex (Form Bool)
+    conc = lneg (tau `equals` tau')
+
+    neqPrism :: Control.Lens.Prism' 
+                  (ClassicalSequentOver HOArithSumLex (Form Bool)) 
+                  (ClassicalSequentOver HOArithSumLex (Term Int), ClassicalSequentOver HOArithSumLex (Term Int))
+    neqPrism = unaryOpPrism _not . binaryOpPrism eqPrism
+
+    eqPrism :: Control.Lens.Prism' (ClassicalSequentOver HOArithSumLex (Term Int -> Term Int -> Form Bool)) ()
+    eqPrism = _termEq
+
 ------------------------------------------------------------
 -- Parser & calculus
 ------------------------------------------------------------
@@ -306,11 +329,12 @@ parseHOArithSumFL rtc =
     -- reject that spelling with a pointer to the current name.
     eqReject = string "EQ" >> unexpected "rule EQ (it is named =E in this system)"
     parseArith = do
-        r <- choice (map (try . string) ["Ind", "PolyEq", "PolyLt", "ΣZ", "SumZ", "ΣS", "SumS", "Chain", "EQR"])
+        r <- choice (map (try . string) ["Ind", "PolyEq", "PolyLt", "PolyNeq", "ΣZ", "SumZ", "ΣS", "SumS", "Chain", "EQR"])
         return $ case r of
             "Ind"   -> [Induction, InductionPlus]
             "PolyEq"  -> [PolyEq]
             "PolyLt"  -> [PolyLt]
+            "PolyNeq" -> [PolyNeq]
             "Chain" -> map EqChain [1 .. maxEqChainLength]
             "EQR"   -> [EqCong]
             r | r `elem` ["ΣZ", "SumZ"] -> [SumZero]
