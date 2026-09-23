@@ -7,7 +7,7 @@
 -- representation.  Two terms are decided polynomial-equal iff their
 -- normalized polynomial representations agree.
 module Carnap.Languages.HOArithSum.Util
-    ( polyNormalize, polyEq, decidePolyEq, Polynomial
+    ( polyNormalize, polyEq, decidePolyEq, decidePolyLt, Polynomial
     ) where
 
 import Control.Lens (preview)

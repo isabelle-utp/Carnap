@@ -278,6 +278,8 @@ instance (Sequentable lex, PrismSubstitutionalVariable lex) => PrismSubstitution
         link_PrismSubstitutionalVar = underlyingLex . link_PrismSubstitutionalVar . relexIso
 instance (Sequentable lex, PrismDefiniteDesc lex b c) => PrismDefiniteDesc (ClassicalSequentLexOver lex) b c where
         link_definDesc = underlyingLex . link_definDesc . relexIso
+instance (Sequentable lex, PrismTermLessThan lex c b) => PrismTermLessThan (ClassicalSequentLexOver lex) c b where
+        link_TermLessThan = underlyingLex . link_TermLessThan . relexIso
 
 --------------------------------------------------------
 --3. Sequent Languages
