@@ -214,15 +214,15 @@ parseFosterFOLEq rtc = try quantRule <|> try (map Prop <$> propRule)
           caseInsensitiveString s = try (mapM caseInsensitiveChar s) <?> "\"" ++ s ++ "\""
 
 parseFosterFOLEqProof :: RuntimeDeductionConfig PureLexiconFOL (Form Bool) -> String -> [DeductionLine FosterFOLEq PureLexiconFOL (Form Bool)]
-parseFosterFOLEqProof ders = toDeductionHilbertImplicit (parseFosterFOLEq ders) thomasBolducAndZachFOL2019FormulaParserStrict
+parseFosterFOLEqProof ders = toDeductionHilbertImplicit (parseFosterFOLEq ders) fosterLaursenFOLFormulaParser
 
 fosterFOLEqCalc = mkNDCalc 
     { ndRenderer = NoRender
     , ndParseProof = parseFosterFOLEqProof
     , ndProcessLine = hoProcessLineHilbertImplicit
     , ndProcessLineMemo = Just hoProcessLineHilbertImplicitMemo
-    , ndParseSeq = parseSeqOver thomasBolducAndZachFOL2019FormulaParserStrict
-    , ndParseForm = thomasBolducAndZachFOL2019FormulaParserStrict
+    , ndParseSeq = parseSeqOver fosterLaursenFOLFormulaParser
+    , ndParseForm = fosterLaursenFOLFormulaParser
     , ndNotation = formatEquationalSeq . dropOuterParens 
     }
 

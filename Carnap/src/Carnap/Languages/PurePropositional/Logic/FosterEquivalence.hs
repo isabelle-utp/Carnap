@@ -255,18 +255,17 @@ parseFosterPropEq rtc = do
           caseInsensitiveString s = try (mapM caseInsensitiveChar s) <?> "\"" ++ s ++ "\""
 
 parseFosterPropEqProof :: RuntimeDeductionConfig PurePropLexicon (Form Bool) -> String -> [DeductionLine FosterPropEq PurePropLexicon (Form Bool)]
-parseFosterPropEqProof rtc = toDeductionHilbertImplicit (parseFosterPropEq rtc) (purePropFormulaParser thomasBolducZachOpts)
+parseFosterPropEqProof rtc = toDeductionHilbertImplicit (parseFosterPropEq rtc) (purePropFormulaParser fosterLaursenOpts)
 
 fosterPropEqCalc = mkNDCalc 
     { ndRenderer = NoRender
     , ndParseProof = parseFosterPropEqProof
     , ndProcessLine = hoProcessLineHilbertImplicit
     , ndProcessLineMemo = Just hoProcessLineHilbertImplicitMemo
-    , ndParseSeq = parseSeqOver (purePropFormulaParser thomasBolducZachOpts)
-    , ndParseForm = (purePropFormulaParser thomasBolducZachOpts)
+    , ndParseSeq = parseSeqOver (purePropFormulaParser fosterLaursenOpts)
+    , ndParseForm = purePropFormulaParser fosterLaursenOpts
     , ndNotation = formatEquationalSeq . dropOuterParens 
     }
-
     -- Custom notation formatter that replaces the turnstile with the equivalence symbol
 formatEquationalSeq :: String -> String
 formatEquationalSeq s = case break (== '⊢') s of
