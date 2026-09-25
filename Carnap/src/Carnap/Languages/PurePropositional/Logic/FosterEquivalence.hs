@@ -124,10 +124,10 @@ instance Show FosterPropEq where
         show RepOrZero1  = "Zero"
         show OrZero2     = "Zero"
         show RepOrZero2  = "Zero"
-        show LEM     = "LEM"
-        show RepLEM  = "LEM"
-        show LEM2    = "LEM"
-        show RepLEM2 = "LEM"
+        show LEM     = "LT"
+        show RepLEM  = "LT"
+        show LEM2    = "LT"
+        show RepLEM2 = "LT"
         show LC      = "LC"
         show RepLC   = "LC"
         show LC2     = "LC"
@@ -229,7 +229,7 @@ instance Inference FosterPropEq PurePropLexicon (Form Bool) where
 
 parseFosterPropEq :: RuntimeDeductionConfig PurePropLexicon (Form Bool) -> Parsec String u [FosterPropEq]
 parseFosterPropEq rtc = do 
-        r <- choice (map (try . caseInsensitiveString) ["Comm", "DN", "Cond", "Bicond", "DeM", "Assoc", "Abs", "Id", "Dist", "PR", "LHS", "Unit", "Zero", "LEM", "LC", "Neg"])
+        r <- choice (map (try . caseInsensitiveString) ["Comm", "DN", "Cond", "Bicond", "DeM", "Assoc", "Abs", "Id", "Dist", "PR", "LHS", "Unit", "Zero", "LT", "LC", "Neg"])
         return $ case map toLower r of
             "comm"-> [AndComm,CommAnd,OrComm,CommOr,IffComm,CommIff]
             "dn" -> [DNRep,RepDN]
@@ -247,7 +247,7 @@ parseFosterPropEq rtc = do
             "unit" -> [AndUnit1, RepAndUnit1, AndUnit2, RepAndUnit2, OrUnit1, RepOrUnit1, OrUnit2, RepOrUnit2]
             "zero"  -> [AndZero1, RepAndZero1, AndZero2, RepAndZero2, OrZero1, RepOrZero1, OrZero2, RepOrZero2]
             "neg"  -> [NegTop, RepNegTop, NegBot, RepNegBot]
-            "lem"  -> [LEM, RepLEM, LEM2, RepLEM2]
+            "LT"  -> [LEM, RepLEM, LEM2, RepLEM2]
             "lc"   -> [LC, RepLC, LC2, RepLC2]
             "lhs" -> [Pr (problemPremises rtc)]
             "pr" -> [Pr (problemPremises rtc)]
