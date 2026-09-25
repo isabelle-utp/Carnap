@@ -247,7 +247,7 @@ parseFosterPropEq rtc = do
             "unit" -> [AndUnit1, RepAndUnit1, AndUnit2, RepAndUnit2, OrUnit1, RepOrUnit1, OrUnit2, RepOrUnit2]
             "zero"  -> [AndZero1, RepAndZero1, AndZero2, RepAndZero2, OrZero1, RepOrZero1, OrZero2, RepOrZero2]
             "neg"  -> [NegTop, RepNegTop, NegBot, RepNegBot]
-            "LT"  -> [LEM, RepLEM, LEM2, RepLEM2]
+            "lt"  -> [LEM, RepLEM, LEM2, RepLEM2]
             "lc"   -> [LC, RepLC, LC2, RepLC2]
             "lhs" -> [Pr (problemPremises rtc)]
             "pr" -> [Pr (problemPremises rtc)]
