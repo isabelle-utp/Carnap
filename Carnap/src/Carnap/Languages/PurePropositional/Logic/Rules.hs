@@ -145,6 +145,9 @@ falsumIntroduction = [ GammaV 1 :|-: SS (lneg $ phin 1)
                      , GammaV 2 :|-: SS (phin 1)
                      ] ∴ GammaV 1 :+: GammaV 2 :|-: SS lfalsum
 
+verumIntroduction :: BooleanRule lex b
+verumIntroduction = [] ∴ Top :|-: SS lverum
+
 adjunction :: BooleanRule lex b
 adjunction = [ GammaV 1  :|-: SS (phin 1) 
              , GammaV 2  :|-: SS (phin 2)

@@ -35,7 +35,8 @@ data FosterAndLaursenTFLCore = ConjIntro  | As
                                 | BicoIntro3 | BicoIntro4
                                 | BicoElim1  | BicoElim2
                                 | NegeIntro1 | NegeIntro2
-                                | NegeElim   | ContElim 
+                                | NegeElim   | ContElim
+                                | TautIntro
                                 | Indirect1  | Indirect2
                                 | Reiterate
                                 | Pr (Maybe [(ClassicalSequentOver PurePropLexicon (Sequent (Form Bool)))])
@@ -67,6 +68,7 @@ instance Show FosterAndLaursenTFLCore where
         show CondIntro2   = "→I"
         show CondElim     = "→E"
         show ContElim     = "⊥E"
+        show TautIntro    = "⊤I"
         show DisjElim1    = "∨E"
         show DisjElim2    = "∨E"
         show DisjElim3    = "∨E"
@@ -107,6 +109,7 @@ instance Inference FosterAndLaursenTFLCore PurePropLexicon (Form Bool) where
         ruleOf ConjIntro    = adjunction
         ruleOf ConjElim1    = simplificationVariations !! 0
         ruleOf ConjElim2    = simplificationVariations !! 1
+        ruleOf TautIntro    = verumIntroduction
         ruleOf NegeIntro1   = constructiveFalsumReductioVariations !! 0
         ruleOf NegeIntro2   = constructiveFalsumReductioVariations !! 1
         ruleOf NegeElim     = falsumIntroduction
@@ -217,7 +220,7 @@ instance Inference FosterAndLaursenTFL PurePropLexicon (Form Bool) where
 parseFosterAndLaursenTFLCore :: RuntimeDeductionConfig PurePropLexicon (Form Bool) -> Parsec String u [FosterAndLaursenTFLCore]
 parseFosterAndLaursenTFLCore rtc = do r <- choice (map (try . string) [ "AS","PR","&I","/\\I", "∧I", "^I", "&E","/\\E","∧E","^E","~I","-I", "¬I"
                                                                    , "~E","-E", "¬E","IP","PBC","->I", ">I", "=>I", "→I","->E", "=>E", ">E", "→E", "⊥E", "_|_E", "X"
-                                                                   , "vI","\\/I", "|I", "∨I", "vE","\\/E", "|E", "∨E","<->I", "↔I","<->E", "↔E"
+                                                                   , "TI","⊤","vI","\\/I", "|I", "∨I", "vE","\\/E", "|E", "∨E","<->I", "↔I","<->E", "↔E"
                                                                    , "R"])
                                       case r of
                                          r | r == "AS"   -> return [As]
@@ -226,6 +229,7 @@ parseFosterAndLaursenTFLCore rtc = do r <- choice (map (try . string) [ "AS","PR
                                            | r `elem` ["&E","/\\E","∧E","^E"] -> return [ConjElim1, ConjElim2]
                                            | r `elem` ["~I","¬I","-I"]   -> return [NegeIntro1, NegeIntro2]
                                            | r `elem` ["~E","¬E","-E"]   -> return [NegeElim]
+                                           | r `elem` ["TI","⊤I"] -> return [TautIntro]
                                            | r `elem` ["IP","PBC"]  -> return [Indirect1, Indirect2]
                                            | r `elem` ["->I", ">I", "=>I", "→I"] -> return [CondIntro1,CondIntro2]
                                            | r `elem` ["->E", ">E", "=>E", "→E"]  -> return [CondElim]
