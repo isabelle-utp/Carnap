@@ -10,8 +10,8 @@ import System.Exit (exitFailure, exitSuccess)
 import System.IO (hPutStrLn, stderr, readFile, writeFile)
 import Control.Applicative ((<|>))
 import Control.Monad (void, foldM)
-import Data.Char (isSpace)
-import Data.List (dropWhileEnd, isInfixOf, find)
+import Data.Char (isSpace, isDigit, chr)
+import Data.List (dropWhileEnd, isInfixOf, find, nub, intercalate)
 import Data.Maybe (fromMaybe, isJust)
 import Data.Aeson (FromJSON, ToJSON, decode)
 import qualified Data.ByteString.Lazy as BL
@@ -24,7 +24,7 @@ import Control.Monad.State (State)
 
 -- Carnap Imports
 import Carnap.Calculi.NaturalDeduction.Syntax
-    (NaturalDeductionCalc(..), Feedback(..), SupportsND)
+    (NaturalDeductionCalc(..), Feedback(..), SupportsND, justificationOf, depth)
 import Carnap.Calculi.NaturalDeduction.Checker (toDisplaySequence)
 import Carnap.Calculi.Util
     (ProofErrorMessage(..), defaultRuntimeDeductionConfig)
@@ -47,7 +47,7 @@ import Carnap.Languages.DefiniteDescription.Logic.Gamut (ofDefiniteDescSys)
 
 data PartialRule
     = DeriveFact { factFormula :: String, factMarks :: Double }
-    | ApplyRule  { ruleName :: String, ruleMarks :: Double }
+    | ApplyRule  { ruleNames :: [String], ruleMarks :: Double }
     deriving (Show, Generic)
 
 instance FromJSON PartialRule
@@ -107,6 +107,7 @@ data ValidLine = ValidLine
     { lineNum     :: Int
     , lineFormula :: String
     , lineRule    :: String
+    , lineDepth   :: Int
     } deriving (Eq, Show)
 
 --------------------------------------------------------------------------------
@@ -250,15 +251,15 @@ evaluateAnswer :: String -> QuestionSpec -> String -> IO (Double, String)
 evaluateAnswer defSys spec content = case qType spec of
     ExactMatch expected ->
         if trim content == trim expected
-            then return (qMarks spec, "[" ++ qLabel spec ++ "] Passed (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
-            else return (0.0, "[" ++ qLabel spec ++ "] Failed (0.0/" ++ show (qMarks spec) ++ ") - Expected: " ++ expected)
+            then return (qMarks spec, "[" ++ qLabel spec ++ "] Full Marks (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
+            else return (0.0, "[" ++ qLabel spec ++ "] No or incorrect answer (0.0/" ++ show (qMarks spec) ++ ") - Expected: " ++ expected)
 
     TranslationChoice sys goal -> do
         let activeSys = if null sys then defSys else sys
         outcome <- runTranslationChecker activeSys goal content
         case outcome of
             Just True -> 
-                return (qMarks spec, "[" ++ qLabel spec ++ "] Passed (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
+                return (qMarks spec, "[" ++ qLabel spec ++ "] Full Marks (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
             Just False -> 
                 return (0.0, "[" ++ qLabel spec ++ "] Incorrect translation (0.0/" ++ show (qMarks spec) ++ ")")
             Nothing -> 
@@ -269,14 +270,14 @@ evaluateAnswer defSys spec content = case qType spec of
         (outcome, validLines) <- runProofChecker activeSys (Just goal) content
         case outcome of
             Proved -> 
-                return (qMarks spec, "[" ++ qLabel spec ++ "] Passed (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
+                return (qMarks spec, "[" ++ qLabel spec ++ "] Full Marks (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
             _ -> do
                 let pRules = fromMaybe [] mPartial
                     (pScore, pNotes) = evalPartialCredit pRules validLines
                     cappedScore     = min (qMarks spec) pScore
                     fbMsg           = if null pNotes
-                                        then "[" ++ qLabel spec ++ "] Invalid proof (0.0/" ++ show (qMarks spec) ++ ")"
-                                        else "[" ++ qLabel spec ++ "] Partial (" ++ show cappedScore ++ "/" ++ show (qMarks spec) ++ ") - " ++ unwords pNotes
+                                        then "[" ++ qLabel spec ++ "] No or invalid proof (0.0/" ++ show (qMarks spec) ++ ")"
+                                        else "[" ++ qLabel spec ++ "] Partial Marks (" ++ show cappedScore ++ "/" ++ show (qMarks spec) ++ "):" ++ concat pNotes
                 return (cappedScore, fbMsg)
 
 --------------------------------------------------------------------------------
@@ -320,11 +321,16 @@ checkProof sys mgoal proof calc = do
         blank = all isSpace
         ded = ndParseProof calc defaultRuntimeDeductionConfig trimmedProof
         Feedback mseq ds = toDisplaySequence (ndProcessLine calc) ded
-        
-        validLines = [ ValidLine idx (show (ndNotation calc (show line))) "" 
-                     | (idx, Right line) <- zip [1..] ds 
+        -- Zip the display sequence results with the parsed deduction lines to capture rules
+        validLines = [ ValidLine 
+                        idx 
+                        (trim (decodeUnicodeEscapes (show (ndNotation calc (show line))))) 
+                        (maybe "" (unwords . nub . map show) (justificationOf dedLine))
+                        (depth dedLine)
+                     | (idx, (Right line, dedLine)) <- zip [1..] (zip ds ded) 
                      ]
 
+    printValidLines validLines
     case mgoal of
         Nothing -> case mseq of
             Just _  -> return (Proved, validLines)
@@ -388,16 +394,28 @@ evalPartialCredit rules validLines = foldl checkRule (0.0, []) rules
   where
     checkRule (accScore, feedback) rule = case rule of
         DeriveFact targetFormula marks ->
-            if any (\l -> clean (lineFormula l) == clean targetFormula) validLines
-                then (accScore + marks, feedback ++ ["Derived " ++ targetFormula ++ " (+ " ++ show marks ++ ")"])
+            let normTarget = clean (stripRelationalParens (normalizeOperators targetFormula))
+                derived    = any (\l -> 
+                                let normLine = clean (stripRelationalParens (normalizeOperators (lineFormula l)))
+                                in normTarget `isInfixOf` normLine
+                             ) validLines
+            in if derived
+                then (accScore + marks, feedback ++ ["\n  * Derived " ++ targetFormula ++ " (+" ++ show marks ++ ")"])
                 else (accScore, feedback)
-
-        ApplyRule targetRule marks ->
-            if any (\l -> targetRule `isInfixOf` lineRule l) validLines
-                then (accScore + marks, feedback ++ ["Applied rule " ++ targetRule ++ " (+ " ++ show marks ++ ")"])
+        ApplyRule names marks ->
+            let normTargets = map (clean . normalizeOperators) names
+                isMatched l = 
+                    let normLineRule = clean (normalizeOperators (lineRule l))
+                    in any (`isInfixOf` normLineRule) normTargets
+                used = any isMatched validLines
+            in if used
+                then 
+                    let formattedNames = intercalate " / " names
+                        ruleMsg = "\n  * Applied rule (" ++ formattedNames ++ ") (+" ++ show marks ++ ")"
+                    in (accScore + marks, feedback ++ [ruleMsg])
                 else (accScore, feedback)
-
-    clean = filter (not . (`elem` (" \t\r\n" :: String)))
+  
+    clean = filter (not . (`elem` (" :\t\r\n\"" :: String)))
 
 --------------------------------------------------------------------------------
 -- Helpers & Formatting
@@ -406,20 +424,43 @@ evalPartialCredit rules validLines = foldl checkRule (0.0, []) rules
 -- Normalizes ASCII logic operators into standard Carnap Unicode symbols
 normalizeOperators :: String -> String
 normalizeOperators [] = []
-normalizeOperators ('/':'\\':xs) = '∧' : normalizeOperators xs
-normalizeOperators ('\\':'/':xs) = '∨' : normalizeOperators xs
-normalizeOperators ('<':'-':'>':xs) = '↔' : normalizeOperators xs
-normalizeOperators ('-':'>':xs)     = '→' : normalizeOperators xs
-normalizeOperators ('~':xs)         = '¬' : normalizeOperators xs
-normalizeOperators ('A':'x':xs)     = '∀' : normalizeOperators xs
-normalizeOperators ('E':'x':xs)     = '∃' : normalizeOperators xs
-normalizeOperators (c:xs)           = c   : normalizeOperators xs
+normalizeOperators ('/':'\\':xs)    = '∧' : normalizeOperators xs
+normalizeOperators ('\\':'/':xs)    = '∨' : normalizeOperators xs
+normalizeOperators ('<':'-':'>':xs)  = '↔' : normalizeOperators xs
+normalizeOperators ('-':'>':xs)      = '→' : normalizeOperators xs
+normalizeOperators ('~':xs)          = '¬' : normalizeOperators xs
+normalizeOperators ('A':'x':xs)      = '∀' : normalizeOperators xs
+normalizeOperators ('E':'x':xs)      = '∃' : normalizeOperators xs
+normalizeOperators ('×':xs)          = '*' : normalizeOperators xs  -- Unicode multiplication sign
+normalizeOperators ('&':xs)          = normalizeOperators xs       -- Drop standalone ampersands if left over
+normalizeOperators (c:xs)            = c   : normalizeOperators xs
+
+-- Decodes numeric escapes and strips Carnap formatting noise like \& and non-breaking spaces
+decodeUnicodeEscapes :: String -> String
+decodeUnicodeEscapes [] = []
+decodeUnicodeEscapes ('\\':'\\':rest) = decodeUnicodeEscapes ('\\':rest)
+decodeUnicodeEscapes ('\\':'&':rest)  = decodeUnicodeEscapes rest  -- Strip Carnap's \& escape
+decodeUnicodeEscapes ('\\':c:rest)
+    | isDigit c =
+        let (numStr, remainder) = span isDigit (c:rest)
+            codePoint = read numStr :: Int
+        in chr codePoint : decodeUnicodeEscapes remainder
+decodeUnicodeEscapes (c:cs)
+    | c == '\160' || c == '"' = decodeUnicodeEscapes cs
+    | otherwise              = c : decodeUnicodeEscapes cs
 
 normalizeSeq :: String -> String
 normalizeSeq = go
   where go ('⊤':' ':'⊢':rest) = '∅' : ' ' : '⊢' : go rest
         go (c:cs) = c : go cs
         go []     = []
+
+-- Extracts just the conclusion/succedent from a sequent string if turnstile exists
+extractConclusion :: String -> String
+extractConclusion lineStr = 
+    case dropWhile (/= '⊢') lineStr of
+        '⊢' : rest -> trim rest
+        _          -> lineStr  -- Fallback for systems without turnstiles (e.g. Equivalence proofs)
 
 convertTurnstile :: String -> String
 convertTurnstile []           = []
@@ -431,6 +472,37 @@ trim = dropWhile isSpace . dropWhileEnd isSpace
 
 escapeCsv :: String -> String
 escapeCsv = concatMap (\c -> if c == '"' then "\"\"" else [c])
+
+printValidLines :: [ValidLine] -> IO ()
+printValidLines linesList = mapM_ printLine linesList
+  where
+    printLine l = putStrLn $ "Line " ++ show (lineNum l) 
+                          ++ " | Formula: " ++ lineFormula l 
+                          ++ " | Rule: " ++ lineRule l
+                          ++ " | Depth: " ++ show (lineDepth l)
+
+-- Strips surrounding parentheses only if they enclose the entire expression
+stripOuterParens :: String -> String
+stripOuterParens s
+    | length s >= 2 && head s == '(' && last s == ')' && isEnclosed s = drop 1 (init s)
+    | otherwise = s
+  where
+    isEnclosed str = foldl count (0 :: Int, True) (init (tail str)) == (0, True)
+    count (depth, valid) c
+        | depth < 0 = (depth, False)
+        | c == '('  = (depth + 1, valid)
+        | c == ')'  = (depth - 1, valid && depth > 0)
+        | otherwise = (depth, valid)
+
+-- Removes parens surrounding terms in simple equality or relational statements
+stripRelationalParens :: String -> String
+stripRelationalParens [] = []
+stripRelationalParens ('(' : xs) =
+    let (inner, rest) = span (/= ')') xs
+    in if not (null rest) && not (any (`elem` ("∧∨→↔" :: String)) inner)
+       then inner ++ stripRelationalParens (tail rest)
+       else '(' : stripRelationalParens xs
+stripRelationalParens (c : xs) = c : stripRelationalParens xs
 
 --------------------------------------------------------------------------------
 -- Available Systems Listing
