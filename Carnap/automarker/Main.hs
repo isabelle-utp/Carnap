@@ -23,8 +23,9 @@ import Text.Parsec.Pos (sourceColumn)
 import Control.Monad.State (State)
 
 -- Carnap Imports
+import Carnap.Core.Data.Types (FixLang)
 import Carnap.Calculi.NaturalDeduction.Syntax
-    (NaturalDeductionCalc(..), Feedback(..), SupportsND, justificationOf, depth)
+    (NaturalDeductionCalc(..), Feedback(..), DeductionLine(..), SupportsND, justificationOf, depth, assertion)
 import Carnap.Calculi.NaturalDeduction.Checker (toDisplaySequence)
 import Carnap.Calculi.Util
     (ProofErrorMessage(..), defaultRuntimeDeductionConfig)
@@ -40,6 +41,7 @@ import Carnap.Languages.SetTheory.Logic (ofSetTheorySys)
 import Carnap.Languages.HigherOrderArithmetic.Logic (ofHigherOrderArithmeticSys)
 import Carnap.Languages.HOArithSum.Logic (ofHOArithSumSys)
 import Carnap.Languages.DefiniteDescription.Logic.Gamut (ofDefiniteDescSys)
+import Carnap.Languages.Util.LanguageClasses (ParsableLex)
 
 --------------------------------------------------------------------------------
 -- Data Structures: Exam Schema & Partial Marking Rules
@@ -104,10 +106,10 @@ data Exercise = Exercise
     } deriving (Eq, Show)
 
 data ValidLine = ValidLine
-    { lineNum     :: Int
-    , lineFormula :: String
-    , lineRule    :: String
-    , lineDepth   :: Int
+    { lineNum       :: Int
+    , lineFormula   :: String                  -- Decoded string for fallback matching & debug logging
+    , lineRule      :: String                  -- Normalized rule string (e.g., "∨E")
+    , lineDepth     :: Int                     -- Subproof depth
     } deriving (Eq, Show)
 
 --------------------------------------------------------------------------------
@@ -163,6 +165,43 @@ isNextHeader = do
     spaces
     _ <- exerciseLabelHeader
     return ()
+
+parseTargetAST :: ParsableLex sem lex 
+               => NaturalDeductionCalc r lex sem 
+               -> String 
+               -> Maybe (FixLang lex sem)
+parseTargetAST calc targetStr = 
+    case parse (ndParseForm calc) "" targetStr of
+        Right ast -> Just ast
+        Left _    -> Nothing
+
+isASTMatch :: (Eq (FixLang lex sem), ParsableLex sem lex)
+           => NaturalDeductionCalc r lex sem
+           -> String
+           -> DeductionLine r lex sem
+           -> Bool
+isASTMatch calc targetStr line =
+    case (parseTargetAST calc targetStr, assertion line) of
+        (Just targetAST, Just lineAST) -> targetAST == lineAST
+        _                              -> False
+
+-- Tries to match target formula using Carnap's AST, falling back to clean string infix matching
+isFactMatch :: (Eq (FixLang lex sem), ParsableLex sem lex)
+            => NaturalDeductionCalc r lex sem
+            -> String
+            -> DeductionLine r lex sem
+            -> String
+            -> Bool
+isFactMatch calc targetFormula dedLine rawLineForm =
+    case (parse (ndParseForm calc) "" targetFormula, assertion dedLine) of
+        (Right targetAST, Just lineAST) -> targetAST == lineAST
+        _ -> 
+            -- Fallback string match if AST parsing or assertion extraction is unavailable
+            let normTarget = clean (normalizeOperators targetFormula)
+                normLine   = clean (normalizeOperators rawLineForm)
+            in normTarget `isInfixOf` normLine
+  where
+    clean = filter (not . (`elem` (" \t\r\n\"" :: String)))
 
 --------------------------------------------------------------------------------
 -- Main Entry Point
@@ -324,7 +363,7 @@ checkProof sys mgoal proof calc = do
         -- Zip the display sequence results with the parsed deduction lines to capture rules
         validLines = [ ValidLine 
                         idx 
-                        (trim (decodeUnicodeEscapes (show (ndNotation calc (show line))))) 
+                        (trim (decodeUnicodeEscapes (show (ndNotation calc (show line)))))
                         (maybe "" (unwords . nub . map show) (justificationOf dedLine))
                         (depth dedLine)
                      | (idx, (Right line, dedLine)) <- zip [1..] (zip ds ded) 
