@@ -185,21 +185,39 @@ isASTMatch calc targetStr line =
         (Just targetAST, Just lineAST) -> targetAST == lineAST
         _                              -> False
 
--- Tries to match target formula using Carnap's AST, falling back to clean string infix matching
-isFactMatch :: (Eq (FixLang lex sem), ParsableLex sem lex)
+-- | Matches a target formula against a proof line up to alpha-renaming
+--   using Carnap's sequent unification (seqSubsetUnify), falling back
+--   to AST equality and normalized string matching.
+isFactMatch :: ( SupportsND r lex sem
+               , Sequentable lex
+               , PrismSubstitutionalVariable lex
+               , MonadVar (ClassicalSequentOver lex) (State Int)
+               , Show (ClassicalSequentOver lex (Sequent sem))
+               , Eq (FixLang lex sem)
+               , ParsableLex sem lex
+               )
             => NaturalDeductionCalc r lex sem
             -> String
             -> DeductionLine r lex sem
             -> String
             -> Bool
 isFactMatch calc targetFormula dedLine rawLineForm =
-    case (parse (ndParseForm calc) "" targetFormula, assertion dedLine) of
-        (Right targetAST, Just lineAST) -> targetAST == lineAST
-        _ -> 
-            -- Fallback string match if AST parsing or assertion extraction is unavailable
-            let normTarget = clean (normalizeOperators targetFormula)
-                normLine   = clean (normalizeOperators rawLineForm)
-            in normTarget `isInfixOf` normLine
+    let targetSeqStr = "⊢ " ++ convertTurnstile (trim targetFormula)
+        -- Extract just the formula part if rawLineForm contains a turnstile (e.g. "⊤ ⊢ ∀y P(y)")
+        lineFormOnly = extractConclusion rawLineForm
+        lineSeqStr   = "⊢ " ++ convertTurnstile (trim lineFormOnly)
+    in case (parse (ndParseSeq calc) "" targetSeqStr, parse (ndParseSeq calc) "" lineSeqStr) of
+        (Right targetSeq, Right lineSeq) ->
+            (targetSeq `seqSubsetUnify` lineSeq) && (lineSeq `seqSubsetUnify` targetSeq)
+        _ ->
+            -- Fallback 1: Direct AST equality if sequent parsing fails
+            case (parse (ndParseForm calc) "" targetFormula, assertion dedLine) of
+                (Right targetAST, Just lineAST) -> targetAST == lineAST
+                -- Fallback 2: Normalized string infix match
+                _ ->
+                    let normTarget = clean (normalizeOperators targetFormula)
+                        normLine   = clean (normalizeOperators rawLineForm)
+                    in normTarget `isInfixOf` normLine
   where
     clean = filter (not . (`elem` (" \t\r\n\"" :: String)))
 
@@ -442,8 +460,14 @@ checkTranslationEquiv target studentInput calc = return $
 --------------------------------------------------------------------------------
 -- Partial Marking Engine
 --------------------------------------------------------------------------------
-
-evalPartialCredit :: (Eq (FixLang lex sem), ParsableLex sem lex)
+evalPartialCredit :: ( SupportsND r lex sem
+                     , Sequentable lex
+                     , PrismSubstitutionalVariable lex
+                     , MonadVar (ClassicalSequentOver lex) (State Int)
+                     , Show (ClassicalSequentOver lex (Sequent sem))
+                     , Eq (FixLang lex sem)
+                     , ParsableLex sem lex
+                     )
                   => NaturalDeductionCalc r lex sem
                   -> [PartialRule]
                   -> [(ValidLine, DeductionLine r lex sem)]
