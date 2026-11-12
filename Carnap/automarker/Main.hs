@@ -26,7 +26,7 @@ import Control.Monad.State (State)
 import Carnap.Core.Data.Types (FixLang)
 import Carnap.Calculi.NaturalDeduction.Syntax
     (NaturalDeductionCalc(..), Feedback(..), DeductionLine(..), SupportsND, justificationOf, depth, assertion)
-import Carnap.Calculi.NaturalDeduction.Checker (toDisplaySequence)
+import Carnap.Calculi.NaturalDeduction.Checker (toDisplaySequence, seqSubsetUnify)
 import Carnap.Calculi.Util
     (ProofErrorMessage(..), defaultRuntimeDeductionConfig)
 import Carnap.Core.Data.Optics (PrismSubstitutionalVariable)
@@ -306,82 +306,97 @@ evaluateAnswer defSys spec content = case qType spec of
 
     ProofExercise sys goal mPartial -> do
         let activeSys = if null sys then defSys else sys
-        (outcome, validLines) <- runProofChecker activeSys (Just goal) content
+            pRules    = fromMaybe [] mPartial
+        (outcome, validLines, (pScore, pNotes)) <- runProofChecker pRules activeSys (Just goal) content
         case outcome of
-            Proved -> 
-                return (qMarks spec, "[" ++ qLabel spec ++ "] Full Marks (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
+            Proved ->
+                return (qMarks spec, "[" ++ qLabel spec ++ "] Passed (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
+            Failed ->
+                return (0.0, "[" ++ qLabel spec ++ "] Internal error: Failed to parse targetGoal '" ++ goal ++ "'")
             _ -> do
-                let pRules = fromMaybe [] mPartial
-                    (pScore, pNotes) = evalPartialCredit pRules validLines
-                    cappedScore     = min (qMarks spec) pScore
-                    fbMsg           = if null pNotes
-                                        then "[" ++ qLabel spec ++ "] No or invalid proof (0.0/" ++ show (qMarks spec) ++ ")"
-                                        else "[" ++ qLabel spec ++ "] Partial Marks (" ++ show cappedScore ++ "/" ++ show (qMarks spec) ++ "):" ++ concat pNotes
+                let cappedScore = min (qMarks spec) pScore
+                    fbMsg       = if null pNotes
+                                    then "[" ++ qLabel spec ++ "] Invalid proof (0.0/" ++ show (qMarks spec) ++ ")"
+                                    else "[" ++ qLabel spec ++ "] Partial (" ++ show cappedScore ++ "/" ++ show (qMarks spec) ++ "):" ++ concat pNotes
                 return (cappedScore, fbMsg)
 
 --------------------------------------------------------------------------------
 -- Carnap Core Dispatch Engine
 --------------------------------------------------------------------------------
 
-data LemmaOutcome = Proved | Mismatch | Failed
+data LemmaOutcome = Proved | Mismatch | Failed | NotProved
     deriving (Eq, Show)
 
-runProofChecker :: String -> Maybe String -> String -> IO (LemmaOutcome, [ValidLine])
-runProofChecker sys mgoal proof = case dispatch of
-    Nothing -> do
-        hPutStrLn stderr $ "Unknown logic system '" ++ sys ++ "'"
-        return (Failed, [])
-    Just act -> act
+runProofChecker :: [PartialRule]
+                -> String
+                -> Maybe String
+                -> String
+                -> IO (LemmaOutcome, [ValidLine], (Double, [String]))
+runProofChecker pRules sys mgoal proof =
+    case dispatch of
+        Nothing -> do
+            hPutStrLn stderr $ "Unknown logic system '" ++ sys ++ "'"
+            return (Failed, [], (0.0, []))
+        Just act -> act
   where
     dispatch =
-            (checkProof sys mgoal proof `ofPropSys` sys)
-        <|> (checkProof sys mgoal proof `ofFOLSys` sys)
-        <|> (checkProof sys mgoal proof `ofModalPropSys` sys)
-        <|> (if sys == "hardegreeMPL" then Just (checkProof sys mgoal proof hardegreeMPLCalc) else Nothing)
-        <|> (checkProof sys mgoal proof `ofSecondOrderSys` sys)
-        <|> (checkProof sys mgoal proof `ofSetTheorySys` sys)
-        <|> (checkProof sys mgoal proof `ofHigherOrderArithmeticSys` sys)
-        <|> (checkProof sys mgoal proof `ofHOArithSumSys` sys)
-        <|> (checkProof sys mgoal proof `ofDefiniteDescSys` sys)
+            (checkProof pRules sys mgoal proof `ofPropSys` sys)
+        <|> (checkProof pRules sys mgoal proof `ofFOLSys` sys)
+        <|> (checkProof pRules sys mgoal proof `ofModalPropSys` sys)
+        <|> (if sys == "hardegreeMPL" then Just (checkProof pRules sys mgoal proof hardegreeMPLCalc) else Nothing)
+        <|> (checkProof pRules sys mgoal proof `ofSecondOrderSys` sys)
+        <|> (checkProof pRules sys mgoal proof `ofSetTheorySys` sys)
+        <|> (checkProof pRules sys mgoal proof `ofHigherOrderArithmeticSys` sys)
+        <|> (checkProof pRules sys mgoal proof `ofHOArithSumSys` sys)
+        <|> (checkProof pRules sys mgoal proof `ofDefiniteDescSys` sys)
 
+-- | Checks a natural deduction proof against an optional goal sequent,
+--   extracts valid proof lines, and evaluates partial credit rules using
+--   Carnap's AST equality (falling back to normalized string matching).
 checkProof :: ( SupportsND r lex sem
               , Sequentable lex
               , PrismSubstitutionalVariable lex
               , MonadVar (ClassicalSequentOver lex) (State Int)
               , Show (ClassicalSequentOver lex (Sequent sem))
+              , Eq (FixLang lex sem)
+              , ParsableLex sem lex
               )
-           => String
+           => [PartialRule]
+           -> String
            -> Maybe String
            -> String
            -> NaturalDeductionCalc r lex sem
-           -> IO (LemmaOutcome, [ValidLine])
-checkProof sys mgoal proof calc = do
+           -> IO (LemmaOutcome, [ValidLine], (Double, [String]))
+checkProof pRules _sys mgoal proof calc = do
     let trimmedProof = unlines . dropWhileEnd blank . dropWhile blank . lines $ proof
-        blank = all isSpace
-        ded = ndParseProof calc defaultRuntimeDeductionConfig trimmedProof
+        blank        = all isSpace
+        ded          = ndParseProof calc defaultRuntimeDeductionConfig trimmedProof
         Feedback mseq ds = toDisplaySequence (ndProcessLine calc) ded
-        -- Zip the display sequence results with the parsed deduction lines to capture rules
-        validLines = [ ValidLine 
-                        idx 
-                        (trim (decodeUnicodeEscapes (show (ndNotation calc (show line)))))
-                        (maybe "" (unwords . nub . map show) (justificationOf dedLine))
-                        (depth dedLine)
-                     | (idx, (Right line, dedLine)) <- zip [1..] (zip ds ded) 
-                     ]
 
-    printValidLines validLines
-    case mgoal of
-        Nothing -> case mseq of
-            Just _  -> return (Proved, validLines)
-            Nothing -> return (Failed, validLines)
-        Just goalText ->
-            case parse (ndParseSeq calc <* eof) "" (convertTurnstile goalText) of
-                Left _ -> return (Failed, validLines)
-                Right goalSeq -> case mseq of
-                    Just sq
-                      | normalizeSeq (show sq) == normalizeSeq (show goalSeq) -> return (Proved, validLines)
-                      | otherwise -> return (Mismatch, validLines)
-                    Nothing -> return (Failed, validLines)
+        linePairs = [ ( ValidLine
+                          idx
+                          (trim (decodeUnicodeEscapes (show (ndNotation calc (show line)))))
+                          (maybe "" (unwords . nub . map show) (justificationOf dedLine))
+                          (depth dedLine)
+                      , dedLine
+                      )
+                    | (idx, (Right line, dedLine)) <- zip [1..] (zip ds ded)
+                    ]
+
+        outcome = case (mgoal, mseq) of
+            (Nothing, Just _)    -> Proved
+            (Just gStr, Just seqActual) ->
+                case parse (ndParseSeq calc) "" (convertTurnstile gStr) of
+                    Right seqGoal ->
+                        if seqGoal `seqSubsetUnify` seqActual
+                            then Proved
+                            else Mismatch
+                    Left _ -> Failed
+            _ -> NotProved
+
+        partialRes = evalPartialCredit calc pRules linePairs
+
+    return (outcome, map fst linePairs, partialRes)
 
 runTranslationChecker :: String -> String -> String -> IO (Maybe Bool)
 runTranslationChecker sys target studentInput = case dispatch of
@@ -428,33 +443,36 @@ checkTranslationEquiv target studentInput calc = return $
 -- Partial Marking Engine
 --------------------------------------------------------------------------------
 
-evalPartialCredit :: [PartialRule] -> [ValidLine] -> (Double, [String])
-evalPartialCredit rules validLines = foldl checkRule (0.0, []) rules
+evalPartialCredit :: (Eq (FixLang lex sem), ParsableLex sem lex)
+                  => NaturalDeductionCalc r lex sem
+                  -> [PartialRule]
+                  -> [(ValidLine, DeductionLine r lex sem)]
+                  -> (Double, [String])
+evalPartialCredit calc rules linePairs = foldl checkRule (0.0, []) rules
   where
+    validLines = map fst linePairs
+
     checkRule (accScore, feedback) rule = case rule of
         DeriveFact targetFormula marks ->
-            let normTarget = clean (stripRelationalParens (normalizeOperators targetFormula))
-                derived    = any (\l -> 
-                                let normLine = clean (stripRelationalParens (normalizeOperators (lineFormula l)))
-                                in normTarget `isInfixOf` normLine
-                             ) validLines
+            let derived = any (\(vLine, dedLine) -> isFactMatch calc targetFormula dedLine (lineFormula vLine)) linePairs
             in if derived
                 then (accScore + marks, feedback ++ ["\n  * Derived " ++ targetFormula ++ " (+" ++ show marks ++ ")"])
                 else (accScore, feedback)
+
         ApplyRule names marks ->
-            let normTargets = map (clean . normalizeOperators) names
-                isMatched l = 
-                    let normLineRule = clean (normalizeOperators (lineRule l))
+            let normTargets = map (cleanRule . normalizeOperators) names
+                isMatched l =
+                    let normLineRule = cleanRule (normalizeOperators (lineRule l))
                     in any (`isInfixOf` normLineRule) normTargets
                 used = any isMatched validLines
             in if used
-                then 
+                then
                     let formattedNames = intercalate " / " names
                         ruleMsg = "\n  * Applied rule (" ++ formattedNames ++ ") (+" ++ show marks ++ ")"
                     in (accScore + marks, feedback ++ [ruleMsg])
                 else (accScore, feedback)
-  
-    clean = filter (not . (`elem` (" :\t\r\n\"" :: String)))
+
+    cleanRule = filter (not . (`elem` (" :\"\t\r\n" :: String)))
 
 --------------------------------------------------------------------------------
 -- Helpers & Formatting
