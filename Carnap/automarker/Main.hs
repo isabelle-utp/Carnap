@@ -10,7 +10,7 @@ import System.Exit (exitFailure, exitSuccess)
 import System.IO (hPutStrLn, stderr, readFile, writeFile)
 import Control.Applicative ((<|>))
 import Control.Monad (void, foldM)
-import Data.Char (isSpace, isDigit, chr)
+import Data.Char (isSpace, isDigit, chr, toLower)
 import Data.List (dropWhileEnd, isInfixOf, find, nub, intercalate)
 import Data.Maybe (fromMaybe, isJust)
 import Data.Aeson (FromJSON, ToJSON, decode)
@@ -48,7 +48,7 @@ import Carnap.Languages.Util.LanguageClasses (ParsableLex)
 --------------------------------------------------------------------------------
 
 data PartialRule
-    = DeriveFact { factFormula :: String, factMarks :: Double }
+    = DeriveFact { factFormula :: String, factRule :: Maybe [String], factMarks :: Double }
     | ApplyRule  { ruleNames :: [String], ruleMarks :: Double }
     deriving (Show, Generic)
 
@@ -202,18 +202,15 @@ isFactMatch :: ( SupportsND r lex sem
             -> String
             -> Bool
 isFactMatch calc targetFormula dedLine rawLineForm =
-    let targetSeqStr = "⊢ " ++ convertTurnstile (trim targetFormula)
-        -- Extract just the formula part if rawLineForm contains a turnstile (e.g. "⊤ ⊢ ∀y P(y)")
+    let targetSeqStr = "⊢ " ++ normalizeOperators (convertTurnstile (trim targetFormula))
         lineFormOnly = extractConclusion rawLineForm
-        lineSeqStr   = "⊢ " ++ convertTurnstile (trim lineFormOnly)
+        lineSeqStr   = "⊢ " ++ normalizeOperators (convertTurnstile (trim lineFormOnly))
     in case (parse (ndParseSeq calc) "" targetSeqStr, parse (ndParseSeq calc) "" lineSeqStr) of
         (Right targetSeq, Right lineSeq) ->
             (targetSeq `seqSubsetUnify` lineSeq) && (lineSeq `seqSubsetUnify` targetSeq)
         _ ->
-            -- Fallback 1: Direct AST equality if sequent parsing fails
-            case (parse (ndParseForm calc) "" targetFormula, assertion dedLine) of
+            case (parse (ndParseForm calc) "" (normalizeOperators targetFormula), assertion dedLine) of
                 (Right targetAST, Just lineAST) -> targetAST == lineAST
-                -- Fallback 2: Normalized string infix match
                 _ ->
                     let normTarget = clean (normalizeOperators targetFormula)
                         normLine   = clean (normalizeOperators rawLineForm)
@@ -476,19 +473,29 @@ evalPartialCredit calc rules linePairs = foldl checkRule (0.0, []) rules
   where
     validLines = map fst linePairs
 
+    matchesRule :: [String] -> ValidLine -> Bool
+    matchesRule targetNames vLine =
+        let normTargets  = map (cleanRule . normalizeOperators) targetNames
+            normLineRule = cleanRule (normalizeOperators (lineRule vLine))
+        in any (`isInfixOf` normLineRule) normTargets
+
     checkRule (accScore, feedback) rule = case rule of
-        DeriveFact targetFormula marks ->
-            let derived = any (\(vLine, dedLine) -> isFactMatch calc targetFormula dedLine (lineFormula vLine)) linePairs
+        DeriveFact targetFormula mRuleNames marks ->
+            let isLineMatch (vLine, dedLine) =
+                    isFactMatch calc targetFormula dedLine (lineFormula vLine)
+                    && maybe True (`matchesRule` vLine) mRuleNames
+                derived = any isLineMatch linePairs
             in if derived
-                then (accScore + marks, feedback ++ ["\n  * Derived " ++ targetFormula ++ " (+" ++ show marks ++ ")"])
+                then
+                    let ruleSuffix = case mRuleNames of
+                            Just rs | not (null rs) -> " using " ++ intercalate " / " rs
+                            _                       -> ""
+                        msg = "\n  * Derived " ++ targetFormula ++ ruleSuffix ++ " (+" ++ show marks ++ ")"
+                    in (accScore + marks, feedback ++ [msg])
                 else (accScore, feedback)
 
         ApplyRule names marks ->
-            let normTargets = map (cleanRule . normalizeOperators) names
-                isMatched l =
-                    let normLineRule = cleanRule (normalizeOperators (lineRule l))
-                    in any (`isInfixOf` normLineRule) normTargets
-                used = any isMatched validLines
+            let used = any (matchesRule names) validLines
             in if used
                 then
                     let formattedNames = intercalate " / " names
@@ -496,7 +503,7 @@ evalPartialCredit calc rules linePairs = foldl checkRule (0.0, []) rules
                     in (accScore + marks, feedback ++ [ruleMsg])
                 else (accScore, feedback)
 
-    cleanRule = filter (not . (`elem` (" :\"\t\r\n" :: String)))
+    cleanRule = map toLower . filter (not . (`elem` (" :\"\t\r\n" :: String)))
 
 --------------------------------------------------------------------------------
 -- Helpers & Formatting
