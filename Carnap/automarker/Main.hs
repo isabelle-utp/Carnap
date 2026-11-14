@@ -435,6 +435,8 @@ checkTranslationEquiv :: ( SupportsND r lex sem
                          , PrismSubstitutionalVariable lex
                          , MonadVar (ClassicalSequentOver lex) (State Int)
                          , Show (ClassicalSequentOver lex (Sequent sem))
+                         , Eq (FixLang lex sem)
+                         , ParsableLex sem lex
                          )
                       => String
                       -> String
@@ -443,16 +445,16 @@ checkTranslationEquiv :: ( SupportsND r lex sem
 checkTranslationEquiv target studentInput calc = return $
     let cleanTarget  = normalizeOperators (trim target)
         cleanStudent = normalizeOperators (trim studentInput)
-    in if cleanTarget == cleanStudent
-        then Just True  -- Fast path: exact string match
-        else
-            -- Build biconditional sequence: "|- (student) <-> (target)"
-            let biSeqStr = "|- (" ++ cleanStudent ++ ") <-> (" ++ cleanTarget ++ ")"
-            in case parse (ndParseSeq calc <* eof) "" (convertTurnstile biSeqStr) of
-                Left _ -> Nothing  -- Student answer failed syntax parsing
-                Right _ -> 
-                    -- Fall back to syntax check if biconditional fails
-                    Just (cleanStudent == cleanTarget)
+    in case parse (ndParseSeq calc <* eof) "" ("⊢ " ++ cleanStudent) of
+        Left _ -> Nothing  -- Student answer failed syntax parsing
+        Right studentSeq ->
+            if cleanTarget == cleanStudent
+                then Just True
+                else case parse (ndParseSeq calc <* eof) "" ("⊢ " ++ cleanTarget) of
+                    Right targetSeq ->
+                        Just ((targetSeq `seqSubsetUnify` studentSeq) && (studentSeq `seqSubsetUnify` targetSeq))
+                    Left _ ->
+                        Just (cleanStudent == cleanTarget)
 
 --------------------------------------------------------------------------------
 -- Partial Marking Engine
