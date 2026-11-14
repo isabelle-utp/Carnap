@@ -5,13 +5,15 @@
 
 module Main where
 
+import System.Directory (doesDirectoryExist, listDirectory)
 import System.Environment (getArgs)
 import System.Exit (exitFailure, exitSuccess)
+import System.FilePath ((</>), takeExtension, takeBaseName)
 import System.IO (hPutStrLn, stderr, readFile, writeFile)
 import Control.Applicative ((<|>))
-import Control.Monad (void, foldM)
+import Control.Monad (void, foldM, when)
 import Data.Char (isSpace, isDigit, chr, toLower)
-import Data.List (dropWhileEnd, isInfixOf, find, nub, intercalate)
+import Data.List (dropWhileEnd, isInfixOf, find, nub, intercalate, sort)
 import Data.Maybe (fromMaybe, isJust)
 import Data.Aeson (FromJSON, ToJSON, decode)
 import qualified Data.ByteString.Lazy as BL
@@ -20,6 +22,7 @@ import Text.Parsec hiding ((<|>), State)
 import Text.Parsec.String (Parser)
 import Text.Parsec.Error (errorMessages, errorPos, showErrorMessages)
 import Text.Parsec.Pos (sourceColumn)
+import Text.Printf (printf)
 import Control.Monad.State (State)
 
 -- Carnap Imports
@@ -111,6 +114,17 @@ data ValidLine = ValidLine
     , lineRule      :: String                  -- Normalized rule string (e.g., "∨E")
     , lineDepth     :: Int                     -- Subproof depth
     } deriving (Eq, Show)
+
+data SubmissionResult = SubmissionResult
+    { resFile           :: FilePath
+    , resStudentId      :: String
+    , resTitle          :: String
+    , resSavedOn        :: String
+    , resTotal          :: Double
+    , resMax            :: Double
+    , resQuestionScores :: [(String, Double)]  -- (qLabel, awardedMarks)
+    , resFeedback       :: [String]
+    } deriving (Show)
 
 --------------------------------------------------------------------------------
 -- Parsec Parser for JS-Downloaded Browser Submissions
@@ -227,69 +241,93 @@ main = do
     args <- getArgs
     case args of
         ["--list"] -> printSystems
-        ["--schema", schemaPath, subPath] -> gradeSingleSubmission schemaPath subPath
-        ["--schema", schemaPath, subPath, outCsvPath] -> gradeAndExportCSV schemaPath subPath outCsvPath
+        ("--schema" : schemaPath : rest) -> parseRunArgs schemaPath rest
         _ -> usage >> exitFailure
+
+parseRunArgs :: FilePath -> [String] -> IO ()
+parseRunArgs schemaPath rest = case extractCsvFlag rest of
+    (Just outCsv, inputs@(_:_)) -> runBatch schemaPath inputs (Just outCsv)
+    (Nothing, [subPath, outCsv]) | takeExtension outCsv == ".csv" ->
+        runBatch schemaPath [subPath] (Just outCsv)
+    (Nothing, inputs@(_:_)) -> runBatch schemaPath inputs Nothing
+    _ -> usage >> exitFailure
+  where
+    extractCsvFlag ("--csv" : csvPath : xs) = (Just csvPath, xs)
+    extractCsvFlag (x : xs) =
+        let (mCsv, ys) = extractCsvFlag xs
+        in (mCsv, x : ys)
+    extractCsvFlag [] = (Nothing, [])
+
+runBatch :: FilePath -> [FilePath] -> Maybe FilePath -> IO ()
+runBatch schemaPath rawInputs mOutCsv = do
+    mSchema <- loadSchema schemaPath
+    case mSchema of
+        Nothing -> hPutStrLn stderr "Error: Failed to parse schema JSON file." >> exitFailure
+        Just schema -> do
+            files <- resolveSubmissionPaths rawInputs
+            if null files
+                then hPutStrLn stderr "Error: No .txt submission files found." >> exitFailure
+                else do
+                    mResults <- mapM (gradeFile schema) files
+                    let results = [ r | Just r <- mResults ]
+                    mapM_ printStudentSummary results
+                    when (length results > 1) $ printCohortReport schema results
+                    case mOutCsv of
+                        Just csvPath -> exportBatchCSV csvPath schema results
+                        Nothing      -> return ()
+
+printStudentSummary :: SubmissionResult -> IO ()
+printStudentSummary r = do
+    putStrLn $ "Student: " ++ resStudentId r ++ " (" ++ resTitle r ++ ")"
+    putStrLn $ "Saved On: " ++ resSavedOn r
+    putStrLn "--------------------------------------------------"
+    mapM_ (putStrLn . ("  " ++)) (resFeedback r)
+    printf "Final Score: %.2f / %.2f\n\n" (resTotal r) (resMax r)
 
 usage :: IO ()
 usage = do
-    hPutStrLn stderr "Usage: carnap-automarker --schema <schema.json> <submission.txt> [<output.csv>]"
+    hPutStrLn stderr "Usage: carnap-automarker --schema <schema.json> [--csv <output.csv>] <file_or_dir> [<file_or_dir> ...]"
     hPutStrLn stderr "       carnap-automarker --list"
 
 --------------------------------------------------------------------------------
 -- Grading Engine Integration
 --------------------------------------------------------------------------------
 
-gradeSingleSubmission :: FilePath -> FilePath -> IO ()
-gradeSingleSubmission schemaPath subPath = do
-    mSchema <- loadSchema schemaPath
-    case mSchema of
-        Nothing -> hPutStrLn stderr "Error: Failed to parse schema JSON file." >> exitFailure
-        Just schema -> do
-            subText <- readFile subPath
-            case parseCarnapBrowserFile subText of
-                Left err -> hPutStrLn stderr ("Error parsing submission: " ++ show err) >> exitFailure
-                Right sub -> do
-                    putStrLn $ "Grading Assessment: " ++ subTitle sub
-                    putStrLn $ "Student Submission Date: " ++ subSavedOn sub
-                    putStrLn "--------------------------------------------------"
-                    (achieved, maxPossible, feedbackList) <- evaluateAll schema sub
-                    putStrLn $ "\nFinal Score: " ++ show achieved ++ " / " ++ show maxPossible
-                    mapM_ (putStrLn . ("  " ++)) feedbackList
-
-gradeAndExportCSV :: FilePath -> FilePath -> FilePath -> IO ()
-gradeAndExportCSV schemaPath subPath outCsvPath = do
-    mSchema <- loadSchema schemaPath
-    case mSchema of
-        Nothing -> hPutStrLn stderr "Error: Failed to parse schema JSON file." >> exitFailure
-        Just schema -> do
-            subText <- readFile subPath
-            case parseCarnapBrowserFile subText of
-                Left err -> hPutStrLn stderr ("Error parsing submission: " ++ show err) >> exitFailure
-                Right sub -> do
-                    (achieved, maxPossible, feedbackList) <- evaluateAll schema sub
-                    let csvHeader = "Submission Title,Saved On,Score,Max Score,Feedback\n"
-                        csvRow = "\"" ++ subTitle sub ++ "\",\"" 
-                              ++ subSavedOn sub ++ "\"," 
-                              ++ show achieved ++ "," 
-                              ++ show maxPossible ++ ",\"" 
-                              ++ escapeCsv (unwords feedbackList) ++ "\"\n"
-                    writeFile outCsvPath (csvHeader ++ csvRow)
-                    putStrLn $ "Successfully exported grades to " ++ outCsvPath
-
 loadSchema :: FilePath -> IO (Maybe ExamSchema)
 loadSchema path = do
     content <- BL.readFile path
     return (decode content)
 
-evaluateAll :: ExamSchema -> Submission -> IO (Double, Double, [String])
-evaluateAll schema sub = do
+evaluateAll :: ExamSchema -> FilePath -> Submission -> IO SubmissionResult
+evaluateAll schema path sub = do
     let qSpecs = questions schema
     results <- mapM (gradeQuestion (defaultSystem schema) sub) qSpecs
-    let totalScore = sum (map fst results)
+    let qScores    = zip (map qLabel qSpecs) (map fst results)
+        totalScore = sum (map fst results)
         maxScore   = sum (map qMarks qSpecs)
         feedback   = map snd results
-    return (totalScore, maxScore, feedback)
+    return SubmissionResult
+        { resFile           = path
+        , resStudentId      = takeBaseName path
+        , resTitle          = subTitle sub
+        , resSavedOn        = subSavedOn sub
+        , resTotal          = totalScore
+        , resMax            = maxScore
+        , resQuestionScores = qScores
+        , resFeedback       = feedback
+        }
+
+resolveSubmissionPaths :: [FilePath] -> IO [FilePath]
+resolveSubmissionPaths paths = fmap (sort . concat) (mapM expandPath paths)
+  where
+    expandPath p = do
+        isDir <- doesDirectoryExist p
+        if isDir
+            then do
+                entries <- listDirectory p
+                let txtFiles = filter (\f -> takeExtension f == ".txt") entries
+                return (map (p </>) txtFiles)
+            else return [p]
 
 gradeQuestion :: String -> Submission -> QuestionSpec -> IO (Double, String)
 gradeQuestion defSys sub spec = do
@@ -334,6 +372,131 @@ evaluateAnswer defSys spec content = case qType spec of
                                     then "[" ++ qLabel spec ++ "] Invalid proof (0.0/" ++ show (qMarks spec) ++ ")"
                                     else "[" ++ qLabel spec ++ "] Partial (" ++ show cappedScore ++ "/" ++ show (qMarks spec) ++ "):" ++ concat pNotes
                 return (cappedScore, fbMsg)
+
+gradeFile :: ExamSchema -> FilePath -> IO (Maybe SubmissionResult)
+gradeFile schema path = do
+    subText <- readFile path
+    case parseCarnapBrowserFile subText of
+        Left err -> do
+            hPutStrLn stderr $ "Warning: Skipping '" ++ path ++ "' (parse error: " ++ show err ++ ")"
+            return Nothing
+        Right sub -> Just <$> evaluateAll schema path sub
+
+--------------------------------------------------------------------------------
+-- Cohort Statistics
+--------------------------------------------------------------------------------
+
+data CohortStats = CohortStats
+    { statCount  :: Int
+    , statMaxPos :: Double
+    , statMean   :: Double
+    , statMedian :: Double
+    , statStdDev :: Double
+    , statMin    :: Double
+    , statMax    :: Double
+    , statQ1     :: Double
+    , statQ3     :: Double
+    } deriving (Show)
+
+computeStats :: [SubmissionResult] -> CohortStats
+computeStats [] = CohortStats 0 0 0 0 0 0 0 0 0
+computeStats results =
+    let scores = sort (map resTotal results)
+        n      = length scores
+        nD     = fromIntegral n
+        maxPos = maybe 0 resMax (listToMaybe results)
+        mean   = sum scores / nD
+        med    = percentile scores 0.50
+        q1     = percentile scores 0.25
+        q3     = percentile scores 0.75
+        -- Sample standard deviation (Bessel-corrected when n > 1)
+        var    = if n > 1
+                   then sum (map (\x -> (x - mean) ^ (2 :: Int)) scores) / (nD - 1)
+                   else 0.0
+    in CohortStats
+        { statCount  = n
+        , statMaxPos = maxPos
+        , statMean   = mean
+        , statMedian = med
+        , statStdDev = sqrt var
+        , statMin    = head scores
+        , statMax    = last scores
+        , statQ1     = q1
+        , statQ3     = q3
+        }
+  where
+    listToMaybe []    = Nothing
+    listToMaybe (x:_) = Just x
+
+-- Linear-interpolation percentile on a sorted non-empty list
+percentile :: [Double] -> Double -> Double
+percentile xs p =
+    let n   = length xs
+        idx = p * fromIntegral (n - 1)
+        lo  = floor idx
+        hi  = ceiling idx
+        w   = idx - fromIntegral lo
+    in if lo == hi
+         then xs !! lo
+         else (xs !! lo) * (1 - w) + (xs !! hi) * w
+
+printCohortReport :: ExamSchema -> [SubmissionResult] -> IO ()
+printCohortReport _ [] = putStrLn "No valid submissions graded."
+printCohortReport schema results = do
+    let s = computeStats results
+        pct x = if statMaxPos s > 0 then (x / statMaxPos s) * 100 else 0
+    putStrLn "\n=================================================="
+    putStrLn $ "COHORT SUMMARY (" ++ examTitle schema ++ ")"
+    putStrLn "=================================================="
+    printf "Submissions Graded : %d\n" (statCount s)
+    printf "Mean Score         : %.2f / %.2f (%.1f%%)\n" (statMean s) (statMaxPos s) (pct (statMean s))
+    printf "Median Score       : %.2f (IQR: %.2f - %.2f)\n" (statMedian s) (statQ1 s) (statQ3 s)
+    printf "Std Deviation      : %.2f\n" (statStdDev s)
+    printf "Min / Max          : %.2f / %.2f\n" (statMin s) (statMax s)
+
+    putStrLn "\nPer-Question Breakdown:"
+    mapM_ (printQuestionStat results) (questions schema)
+
+printQuestionStat :: [SubmissionResult] -> QuestionSpec -> IO ()
+printQuestionStat results spec = do
+    let lbl     = qLabel spec
+        maxM    = qMarks spec
+        qScores = [ sc | r <- results, (l, sc) <- resQuestionScores r, l == lbl ]
+        n       = length qScores
+        avg     = if n > 0 then sum qScores / fromIntegral n else 0
+        fullCnt = length (filter (>= maxM - 1e-6) qScores)
+        pct     = if maxM > 0 then (avg / maxM) * 100 else 0
+    printf "  [%-4s] Avg: %5.2f / %5.2f (%5.1f%%) | Full Marks: %d/%d\n"
+           lbl avg maxM pct fullCnt n
+
+exportBatchCSV :: FilePath -> ExamSchema -> [SubmissionResult] -> IO ()
+exportBatchCSV outCsvPath schema results = do
+    let qLabels = map qLabel (questions schema)
+        header  = intercalate ","
+                    ( ["Student ID", "File", "Submission Title", "Saved On", "Total Score", "Max Score", "Percentage"]
+                      ++ qLabels
+                      ++ ["Feedback"]
+                    ) ++ "\n"
+        rows    = concatMap (toCsvRow qLabels) results
+    writeFile outCsvPath (header ++ rows)
+    putStrLn $ "\nExported " ++ show (length results) ++ " graded submissions to " ++ outCsvPath
+  where
+    toCsvRow qLabels r =
+        let pct = if resMax r > 0 then (resTotal r / resMax r) * 100 else 0
+            qCols = [ printf "%.2f" (fromMaybe 0.0 (lookup lbl (resQuestionScores r))) | lbl <- qLabels ]
+            baseCols =
+                [ quote (resStudentId r)
+                , quote (resFile r)
+                , quote (resTitle r)
+                , quote (resSavedOn r)
+                , printf "%.2f" (resTotal r)
+                , printf "%.2f" (resMax r)
+                , printf "%.1f" pct
+                ]
+            fbCol = [ quote (unwords (resFeedback r)) ]
+        in intercalate "," (baseCols ++ qCols ++ fbCol) ++ "\n"
+
+    quote s = "\"" ++ escapeCsv s ++ "\""
 
 --------------------------------------------------------------------------------
 -- Carnap Core Dispatch Engine
@@ -514,15 +677,17 @@ evalPartialCredit calc rules linePairs = foldl checkRule (0.0, []) rules
 -- Normalizes ASCII logic operators into standard Carnap Unicode symbols
 normalizeOperators :: String -> String
 normalizeOperators [] = []
+normalizeOperators ('|':'-':xs)     = '⊢' : normalizeOperators xs
+normalizeOperators ('|':xs)         = '∨' : normalizeOperators xs
 normalizeOperators ('/':'\\':xs)    = '∧' : normalizeOperators xs
 normalizeOperators ('\\':'/':xs)    = '∨' : normalizeOperators xs
 normalizeOperators ('<':'-':'>':xs)  = '↔' : normalizeOperators xs
 normalizeOperators ('-':'>':xs)      = '→' : normalizeOperators xs
 normalizeOperators ('~':xs)          = '¬' : normalizeOperators xs
-normalizeOperators ('A':'x':xs)      = '∀' : normalizeOperators xs
-normalizeOperators ('E':'x':xs)      = '∃' : normalizeOperators xs
-normalizeOperators ('×':xs)          = '*' : normalizeOperators xs  -- Unicode multiplication sign
-normalizeOperators ('&':xs)          = normalizeOperators xs       -- Drop standalone ampersands if left over
+normalizeOperators ('A':xs)      = '∀' : normalizeOperators xs
+normalizeOperators ('E':xs)      = '∃' : normalizeOperators xs
+normalizeOperators ('×':xs)          = '*' : normalizeOperators xs
+normalizeOperators ('&':xs)          = '∧' : normalizeOperators xs
 normalizeOperators (c:xs)            = c   : normalizeOperators xs
 
 -- Decodes numeric escapes and strips Carnap formatting noise like \& and non-breaking spaces

@@ -190,6 +190,8 @@ executable carnap-automarker
                      , mtl
                      , parsec
                      , bytestring
+                     , filepath
+                     , directory
                      , aeson >= 1.4
     default-language:  Haskell2010
 
