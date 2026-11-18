@@ -66,7 +66,7 @@ data QuestionType
         }
     | TranslationChoice
         { systemName :: String
-        , targetGoal :: String
+        , targetGoals :: [String]
         }
     | ExactMatch
         { expectedAnswer :: String }
@@ -346,9 +346,9 @@ evaluateAnswer defSys spec content = case qType spec of
             then return (qMarks spec, "[" ++ qLabel spec ++ "] Full Marks (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
             else return (0.0, "[" ++ qLabel spec ++ "] No or incorrect answer (0.0/" ++ show (qMarks spec) ++ ") - Expected: " ++ expected)
 
-    TranslationChoice sys goal -> do
+    TranslationChoice sys goals -> do
         let activeSys = if null sys then defSys else sys
-        outcome <- runTranslationChecker activeSys goal content
+        outcome <- runTranslationChecker activeSys goals content
         case outcome of
             Just True -> 
                 return (qMarks spec, "[" ++ qLabel spec ++ "] Full Marks (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
@@ -363,14 +363,14 @@ evaluateAnswer defSys spec content = case qType spec of
         (outcome, validLines, (pScore, pNotes)) <- runProofChecker pRules activeSys (Just goal) content
         case outcome of
             Proved ->
-                return (qMarks spec, "[" ++ qLabel spec ++ "] Passed (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
+                return (qMarks spec, "[" ++ qLabel spec ++ "] Full Marks (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
             Failed ->
                 return (0.0, "[" ++ qLabel spec ++ "] Internal error: Failed to parse targetGoal '" ++ goal ++ "'")
             _ -> do
                 let cappedScore = min (qMarks spec) pScore
                     fbMsg       = if null pNotes
                                     then "[" ++ qLabel spec ++ "] Invalid proof (0.0/" ++ show (qMarks spec) ++ ")"
-                                    else "[" ++ qLabel spec ++ "] Partial (" ++ show cappedScore ++ "/" ++ show (qMarks spec) ++ "):" ++ concat pNotes
+                                    else "[" ++ qLabel spec ++ "] Partial Marks (" ++ show cappedScore ++ "/" ++ show (qMarks spec) ++ "):" ++ concat pNotes
                 return (cappedScore, fbMsg)
 
 gradeFile :: ExamSchema -> FilePath -> IO (Maybe SubmissionResult)
@@ -576,22 +576,22 @@ checkProof pRules _sys mgoal proof calc = do
 
     return (outcome, map fst linePairs, partialRes)
 
-runTranslationChecker :: String -> String -> String -> IO (Maybe Bool)
-runTranslationChecker sys target studentInput = case dispatch of
+runTranslationChecker :: String -> [String] -> String -> IO (Maybe Bool)
+runTranslationChecker sys targets studentInput = case dispatch of
     Nothing -> do
         hPutStrLn stderr $ "Unknown logic system for translation: '" ++ sys ++ "'"
         return Nothing
     Just act -> act
   where
     dispatch =
-            (checkTranslationEquiv target studentInput `ofPropSys` sys)
-        <|> (checkTranslationEquiv target studentInput `ofFOLSys` sys)
-        <|> (checkTranslationEquiv target studentInput `ofModalPropSys` sys)
-        <|> (checkTranslationEquiv target studentInput `ofSecondOrderSys` sys)
-        <|> (checkTranslationEquiv target studentInput `ofSetTheorySys` sys)
-        <|> (checkTranslationEquiv target studentInput `ofHigherOrderArithmeticSys` sys)
-        <|> (checkTranslationEquiv target studentInput `ofHOArithSumSys` sys)
-        <|> (checkTranslationEquiv target studentInput `ofDefiniteDescSys` sys)
+            (checkTranslationEquiv targets studentInput `ofPropSys` sys)
+        <|> (checkTranslationEquiv targets studentInput `ofFOLSys` sys)
+        <|> (checkTranslationEquiv targets studentInput `ofModalPropSys` sys)
+        <|> (checkTranslationEquiv targets studentInput `ofSecondOrderSys` sys)
+        <|> (checkTranslationEquiv targets studentInput `ofSetTheorySys` sys)
+        <|> (checkTranslationEquiv targets studentInput `ofHigherOrderArithmeticSys` sys)
+        <|> (checkTranslationEquiv targets studentInput `ofHOArithSumSys` sys)
+        <|> (checkTranslationEquiv targets studentInput `ofDefiniteDescSys` sys)
 
 checkTranslationEquiv :: ( SupportsND r lex sem
                          , Sequentable lex
@@ -601,23 +601,23 @@ checkTranslationEquiv :: ( SupportsND r lex sem
                          , Eq (FixLang lex sem)
                          , ParsableLex sem lex
                          )
-                      => String
+                      => [String]
                       -> String
                       -> NaturalDeductionCalc r lex sem
                       -> IO (Maybe Bool)
-checkTranslationEquiv target studentInput calc = return $
-    let cleanTarget  = normalizeOperators (trim target)
-        cleanStudent = normalizeOperators (trim studentInput)
+checkTranslationEquiv targets studentInput calc = return $
+    let cleanStudent = normalizeOperators (trim studentInput)
     in case parse (ndParseSeq calc <* eof) "" ("⊢ " ++ cleanStudent) of
         Left _ -> Nothing  -- Student answer failed syntax parsing
         Right studentSeq ->
-            if cleanTarget == cleanStudent
-                then Just True
-                else case parse (ndParseSeq calc <* eof) "" ("⊢ " ++ cleanTarget) of
-                    Right targetSeq ->
-                        Just ((targetSeq `seqSubsetUnify` studentSeq) && (studentSeq `seqSubsetUnify` targetSeq))
-                    Left _ ->
-                        Just (cleanStudent == cleanTarget)
+            let matchesTarget rawTarget =
+                    let cleanTarget = normalizeOperators (trim rawTarget)
+                    in cleanTarget == cleanStudent
+                       || case parse (ndParseSeq calc <* eof) "" ("⊢ " ++ cleanTarget) of
+                            Right targetSeq ->
+                                ((targetSeq `seqSubsetUnify` studentSeq) && (studentSeq `seqSubsetUnify` targetSeq))
+                            Left _ -> False
+            in Just (any matchesTarget targets)
 
 --------------------------------------------------------------------------------
 -- Partial Marking Engine
@@ -680,6 +680,7 @@ normalizeOperators [] = []
 normalizeOperators ('|':'-':xs)     = '⊢' : normalizeOperators xs
 normalizeOperators ('|':xs)         = '∨' : normalizeOperators xs
 normalizeOperators ('/':'\\':xs)    = '∧' : normalizeOperators xs
+normalizeOperators ('^':xs)         = '∧' : normalizeOperators xs
 normalizeOperators ('\\':'/':xs)    = '∨' : normalizeOperators xs
 normalizeOperators ('<':'-':'>':xs)  = '↔' : normalizeOperators xs
 normalizeOperators ('-':'>':xs)      = '→' : normalizeOperators xs
