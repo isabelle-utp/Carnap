@@ -642,7 +642,7 @@ evalPartialCredit calc rules linePairs = foldl checkRule (0.0, []) rules
     matchesRule targetNames vLine =
         let normTargets  = map (cleanRule . normalizeOperators) targetNames
             normLineRule = cleanRule (normalizeOperators (lineRule vLine))
-        in any (`isInfixOf` normLineRule) normTargets
+        in normLineRule `elem` normTargets
 
     checkRule (accScore, feedback) rule = case rule of
         DeriveFact targetFormula mRuleNames marks ->
