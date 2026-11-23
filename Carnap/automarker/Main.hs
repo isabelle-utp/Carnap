@@ -343,7 +343,7 @@ evaluateAnswer :: String -> QuestionSpec -> String -> IO (Double, String)
 evaluateAnswer defSys spec content = case qType spec of
     ExactMatch expected ->
         if trim content == trim expected
-            then return (qMarks spec, "[" ++ qLabel spec ++ "] Full Marks (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
+            then return (qMarks spec, "[" ++ qLabel spec ++ "] Full Marks Awarded (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
             else return (0.0, "[" ++ qLabel spec ++ "] No or incorrect answer (0.0/" ++ show (qMarks spec) ++ ") - Expected: " ++ expected)
 
     TranslationChoice sys goals -> do
@@ -351,11 +351,11 @@ evaluateAnswer defSys spec content = case qType spec of
         outcome <- runTranslationChecker activeSys goals content
         case outcome of
             Just True -> 
-                return (qMarks spec, "[" ++ qLabel spec ++ "] Full Marks (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
+                return (qMarks spec, "[" ++ qLabel spec ++ "] Formula Correct: Full Marks Awarded (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
             Just False -> 
-                return (0.0, "[" ++ qLabel spec ++ "] Incorrect translation (0.0/" ++ show (qMarks spec) ++ ")")
+                return (0.0, "[" ++ qLabel spec ++ "] Incorrect formula (0.0/" ++ show (qMarks spec) ++ ")")
             Nothing -> 
-                return (0.0, "[" ++ qLabel spec ++ "] Parse error in translation (0.0/" ++ show (qMarks spec) ++ ")")
+                return (0.0, "[" ++ qLabel spec ++ "] Parse error in formula (0.0/" ++ show (qMarks spec) ++ ")")
 
     ProofExercise sys goal mPartial -> do
         let activeSys = if null sys then defSys else sys
@@ -363,14 +363,14 @@ evaluateAnswer defSys spec content = case qType spec of
         (outcome, validLines, (pScore, pNotes)) <- runProofChecker pRules activeSys (Just goal) content
         case outcome of
             Proved ->
-                return (qMarks spec, "[" ++ qLabel spec ++ "] Full Marks (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
+                return (qMarks spec, "[" ++ qLabel spec ++ "] Complete Proof: Full Marks Awarded (" ++ show (qMarks spec) ++ "/" ++ show (qMarks spec) ++ ")")
             Failed ->
                 return (0.0, "[" ++ qLabel spec ++ "] Internal error: Failed to parse targetGoal '" ++ goal ++ "'")
             _ -> do
                 let cappedScore = min (qMarks spec) pScore
                     fbMsg       = if null pNotes
-                                    then "[" ++ qLabel spec ++ "] Invalid proof (0.0/" ++ show (qMarks spec) ++ ")"
-                                    else "[" ++ qLabel spec ++ "] Partial Marks (" ++ show cappedScore ++ "/" ++ show (qMarks spec) ++ "):" ++ concat pNotes
+                                    then "[" ++ qLabel spec ++ "] No or incorrect proof provided (0.0/" ++ show (qMarks spec) ++ ")"
+                                    else "[" ++ qLabel spec ++ "] Incomplete Proof: Partial Marks Awarded (" ++ show cappedScore ++ "/" ++ show (qMarks spec) ++ "):" ++ concat pNotes
                 return (cappedScore, fbMsg)
 
 gradeFile :: ExamSchema -> FilePath -> IO (Maybe SubmissionResult)
@@ -478,7 +478,8 @@ exportBatchCSV outCsvPath schema results = do
                       ++ ["Feedback"]
                     ) ++ "\n"
         rows    = concatMap (toCsvRow qLabels) results
-    writeFile outCsvPath (header ++ rows)
+        bom     = "\xFEFF"
+    writeFile outCsvPath (bom ++ header ++ rows)
     putStrLn $ "\nExported " ++ show (length results) ++ " graded submissions to " ++ outCsvPath
   where
     toCsvRow qLabels r =
@@ -493,10 +494,21 @@ exportBatchCSV outCsvPath schema results = do
                 , printf "%.2f" (resMax r)
                 , printf "%.1f" pct
                 ]
-            fbCol = [ quote (unwords (resFeedback r)) ]
+            htmlFeedback = intercalate "<br>" (map newlinesToBr (resFeedback r))
+            fbCol = [ quote htmlFeedback ]
         in intercalate "," (baseCols ++ qCols ++ fbCol) ++ "\n"
 
+    newlinesToBr :: String -> String
+    newlinesToBr []            = []
+    newlinesToBr ('\r':'\n':xs) = "<br>" ++ newlinesToBr xs
+    newlinesToBr ('\n':xs)      = "<br>" ++ newlinesToBr xs
+    newlinesToBr (x:xs)         = x : newlinesToBr xs
+
     quote s = "\"" ++ escapeCsv s ++ "\""
+
+    escapeCsv []       = []
+    escapeCsv ('"':xs) = '"' : '"' : escapeCsv xs
+    escapeCsv (x:xs)   = x : escapeCsv xs
 
 --------------------------------------------------------------------------------
 -- Carnap Core Dispatch Engine
