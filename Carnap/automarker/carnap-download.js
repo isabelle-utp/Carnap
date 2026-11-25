@@ -1,6 +1,47 @@
 /**
+ * Helper: Derives an exercise or playground identifier from the node or a parent Pandoc wrapper div.
+ */
+function getExerciseLabel(node, index) {
+  // 1. Check direct Carnap label or wrapper with data-carnap-label (ignoring Carnap's generic "Playground" default)
+  const labeledParent = node.closest('[data-carnap-label]');
+  if (labeledParent) {
+    const label = labeledParent.getAttribute('data-carnap-label');
+    if (label && label.toLowerCase() !== 'playground') {
+      return label;
+    }
+  }
+
+  // 2. Check direct element ID (ignoring Carnap's generic "exercise-Playground" default)
+  if (node.id && node.id.toLowerCase() !== 'exercise-playground') {
+    return node.id.replace(/^(exercise|playground)-/i, '');
+  }
+
+  // 3. Check ancestor Pandoc fenced div wrapper ID (starting from parentElement so we skip node itself)
+  const idWrapper = node.parentElement ? node.parentElement.closest('div[id], section[id]') : null;
+  if (idWrapper && idWrapper.id && !['content', 'main', 'body', 'exercises'].includes(idWrapper.id.toLowerCase())) {
+    return idWrapper.id.replace(/^(exercise|playground)-/i, '');
+  }
+
+  // 4. Fallback naming based on type
+  const isPlayground = (node.getAttribute('data-carnap-label') || '').toLowerCase() === 'playground' ||
+                       node.id === 'exercise-Playground' ||
+                       node.classList.contains('playground');
+  return isPlayground ? `Playground_${index + 1}` : `Exercise_${index + 1}`;
+}
+
+/**
+ * Helper: Queries top-level exercise and playground nodes and excludes nested elements to avoid duplicate scraping.
+ */
+function getTopLevelCarnapNodes() {
+  const allNodes = Array.from(document.querySelectorAll('.exercise, [data-carnap-type], .playground'));
+  return allNodes.filter(node => {
+    return !allNodes.some(otherNode => otherNode !== node && otherNode.contains(node));
+  });
+}
+
+/**
  * Carnap Answers Downloader
- * Scrapes top-level exercise answers from the DOM and downloads them as a formatted text file.
+ * Scrapes top-level exercise and playground answers from the DOM and downloads them as a formatted text file.
  */
 function downloadCarnapAnswers() {
   const records = [];
@@ -9,16 +50,13 @@ function downloadCarnapAnswers() {
   const titleElement = document.querySelector('h1, .carnap-title, #title, header h1');
   const sheetTitle = titleElement ? titleElement.innerText.trim() : document.title;
 
-  // Query top-level exercise nodes and exclude nested elements to avoid duplicate scraping
-  const allNodes = Array.from(document.querySelectorAll('.exercise, [data-carnap-type]'));
-  const topLevelNodes = allNodes.filter(node => {
-    return !allNodes.some(otherNode => otherNode !== node && otherNode.contains(node));
-  });
+  // Query top-level exercise and playground nodes
+  const topLevelNodes = getTopLevelCarnapNodes();
 
-  // Iterate over each top-level exercise to extract answers
+  // Iterate over each top-level exercise or playground to extract answers
   topLevelNodes.forEach((node, index) => {
-    // Derive exercise identifier from data attributes, element id, or fallback index
-    const id = node.getAttribute('data-carnap-label') || node.id.replace(/^exercise-/, '') || `Exercise_${index + 1}`;
+    // Derive exercise/playground identifier from data attributes, wrapper id, element id, or fallback index
+    const id = getExerciseLabel(node, index);
     let answers = [];
 
     // 1. Extract answers from CodeMirror instances (used for proofs, syntax checkers, and translations)
@@ -30,12 +68,12 @@ function downloadCarnapAnswers() {
       }
     });
 
-    // 2. Extract standard inputs, multiple-choice radio buttons, checkboxes, and select dropdowns
+    // 2. Extract standard inputs, Playground textareas, multiple-choice radio buttons, checkboxes, and select dropdowns
     if (answers.length === 0) {
       const inputs = node.querySelectorAll('input:not([type="hidden"]), textarea, select');
       inputs.forEach(input => {
-        // Skip table inputs (handled separately in Truth Tables section)
-        if (input.closest('table')) return;
+        // Skip table inputs (handled separately in Truth Tables section) and internal CodeMirror textareas
+        if (input.closest('table') || input.closest('.CodeMirror')) return;
 
         if (input.tagName.toLowerCase() === 'select') {
           // Extract selected option text or value from dropdown
@@ -65,7 +103,7 @@ function downloadCarnapAnswers() {
             if (finalVal && !answers.includes(finalVal)) answers.push(finalVal);
           }
         } else if (input.value.trim() !== '') {
-          // Standard text inputs and textareas
+          // Standard text inputs and .Playground textareas
           answers.push(input.value.trim());
         }
       });
@@ -87,7 +125,7 @@ function downloadCarnapAnswers() {
       if (tableRows.length > 0) answers.push(tableRows.join('\n'));
     });
 
-    // Store formatted exercise record
+    // Store formatted exercise/playground record
     records.push({
       exercise: id,
       content: answers.join('\n\n') || '[No answer provided]'
@@ -142,15 +180,15 @@ function restoreCarnapAnswers() {
 
 /**
  * Main Restoration Engine
- * Maps parsed exercise answers back to Carnap DOM components and triggers native UI events.
+ * Maps parsed exercise and playground answers back to Carnap DOM components and triggers native UI events.
  */
 function parseAndRestoreCarnap(fileContent) {
-  // Parse text content into key-value map using bracket section headers, e.g., [1.1]
+  // Parse text content into key-value map using bracket section headers, e.g., [1.1] or [playground-1.1]
   const dataMap = {};
-  const sections = fileContent.split(/\n(?=\[\s*[\w\.]+\s*\])/g);
+  const sections = fileContent.split(/\n(?=\[\s*[\w\.\-]+\s*\])/g);
 
   sections.forEach(section => {
-    const match = section.match(/^\[\s*([\w\.]+)\s*\]\n([\s\S]*)$/);
+    const match = section.match(/^\[\s*([\w\.\-]+)\s*\]\n([\s\S]*)$/);
     if (match) {
       const label = match[1].trim();
       const content = match[2].trim();
@@ -160,15 +198,12 @@ function parseAndRestoreCarnap(fileContent) {
     }
   });
 
-  // Query top-level exercise nodes
-  const allNodes = Array.from(document.querySelectorAll('.exercise, [data-carnap-type]'));
-  const topLevelNodes = allNodes.filter(node => {
-    return !allNodes.some(otherNode => otherNode !== node && otherNode.contains(node));
-  });
+  // Query top-level exercise and playground nodes
+  const topLevelNodes = getTopLevelCarnapNodes();
 
-  // Restore state for each matched exercise node
+  // Restore state for each matched exercise or playground node
   topLevelNodes.forEach((node, index) => {
-    const id = node.getAttribute('data-carnap-label') || node.id.replace(/^exercise-/, '') || `Exercise_${index + 1}`;
+    const id = getExerciseLabel(node, index);
     const value = dataMap[id];
 
     if (!value) return;
@@ -298,13 +333,17 @@ function parseAndRestoreCarnap(fileContent) {
       return;
     }
 
-    // 5. Fallback for standard text input elements and textareas
+    // 5. Fallback for Playground textareas, standard text input elements, and textareas
     const inputs = node.querySelectorAll('input:not([type="hidden"]), textarea');
     inputs.forEach(input => {
+      // Skip CodeMirror's internal hidden textarea if present
+      if (input.closest('.CodeMirror')) return;
+
       input.value = value;
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, bubbles: true }));
     });
   });
 
@@ -313,18 +352,15 @@ function parseAndRestoreCarnap(fileContent) {
 
 /**
  * Carnap Answers Clearer
- * Resets all top-level exercise inputs in the DOM and dispatches native UI events.
+ * Resets all top-level exercise and playground inputs in the DOM and dispatches native UI events.
  */
 function clearCarnapAnswers() {
   if (!confirm("Are you sure you want to clear all answers on this page? This cannot be undone unless you have saved a backup.")) {
     return;
   }
 
-  // Query top-level exercise nodes (matching your scraper/restorer logic)
-  const allNodes = Array.from(document.querySelectorAll('.exercise, [data-carnap-type]'));
-  const topLevelNodes = allNodes.filter(node => {
-    return !allNodes.some(otherNode => otherNode !== node && otherNode.contains(node));
-  });
+  // Query top-level exercise and playground nodes (matching your scraper/restorer logic)
+  const topLevelNodes = getTopLevelCarnapNodes();
 
   topLevelNodes.forEach(node => {
     // 1. Clear CodeMirror instances (Proofs, Syntax Checkers, Translations)
@@ -372,7 +408,7 @@ function clearCarnapAnswers() {
       }
     });
 
-    // 5. Clear Standard Text Inputs & Textareas (including table text inputs)
+    // 5. Clear Standard Text Inputs & Playground Textareas (including table text inputs)
     const textInputs = node.querySelectorAll('input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]), textarea');
     textInputs.forEach(input => {
       // Skip CodeMirror's internal hidden textarea (already handled in step 1)
